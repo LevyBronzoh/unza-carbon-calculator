@@ -13,6 +13,7 @@ use App\Models\ProjectData;
 use App\Services\EmissionsCalculator;
 use Carbon\Carbon;
 use Symfony\Component\HttpFoundation\StreamedResponse;
+use App\Models\ActivityLog;
 
 class AdminController extends Controller
 {
@@ -84,11 +85,42 @@ class AdminController extends Controller
 
     public function analytics(): View
     {
+          // Get recent activities (last 30 days)
+    $recentActivities = ActivityLog::where('created_at', '>=', Carbon::now()->subDays(30))
+                                ->orderBy('created_at', 'desc')
+                                ->take(10)
+                                ->get();
+
+    // Get other analytics data (your existing code)
+    $monthlyRegistrations = User::selectRaw('DATE_FORMAT(created_at, "%Y-%m") as month, COUNT(*) as count')
+                              ->where('created_at', '>=', Carbon::now()->subYear())
+                              ->groupBy('month')
+                              ->orderBy('month')
+                              ->pluck('count', 'month')
+                              ->toArray();
+
+    $stoveTypeDistribution = BaselineData::selectRaw('stove_type, COUNT(*) as count')
+                                       ->groupBy('stove_type')
+                                       ->pluck('count', 'stove_type')
+                                       ->toArray();
+
+    $fuelTypeDistribution = BaselineData::selectRaw('fuel_type, COUNT(*) as count')
+                                      ->groupBy('fuel_type')
+                                      ->pluck('count', 'fuel_type')
+                                      ->toArray();
+
+    $monthlyCredits = ProjectData::selectRaw('DATE_FORMAT(created_at, "%Y-%m") as month, SUM(credits_earned) as total')
+                                ->where('created_at', '>=', Carbon::now()->subYear())
+                                ->groupBy('month')
+                                ->orderBy('month')
+                                ->pluck('total', 'month')
+                                ->toArray();
         return view('admin.analytics', [
             'monthly_registrations' => $this->getMonthlyRegistrations(),
             'stove_type_distribution' => $this->getStoveTypeDistribution(),
             'fuel_type_distribution' => $this->getFuelTypeDistribution(),
-            'monthly_credits' => $this->getMonthlyCreditsTrend()
+            'monthly_credits' => $this->getMonthlyCreditsTrend(),
+            'recentActivities' => $recentActivities
         ]);
     }
 
@@ -327,4 +359,5 @@ private function exportAsExcel(array $data): StreamedResponse
         'Content-Disposition' => 'attachment; filename="carbon_data_'.now()->format('Ymd_His').'.xls"',
     ]);
 }
+
 }

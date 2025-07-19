@@ -44,6 +44,7 @@ class DashboardController extends Controller
     public function index()
     {
         $userId = Auth::id();
+        $user = Auth::user();
 
         // Retrieve user's baseline and project data
         $baselineData = BaselineData::where('user_id', $userId)->first();
@@ -52,8 +53,8 @@ class DashboardController extends Controller
         // Initialize dashboard metrics
         $dashboardMetrics = [
             'user_id' => $userId,
-            'user_name' => Auth::user()->name,
-            'user_type' => Auth::user()->user_type,
+            'user_name' => $user->name,
+            'user_type' => $user->user_type,
             'has_baseline' => false,
             'has_project' => false,
             'monthly_baseline_emissions' => 0,
@@ -103,13 +104,29 @@ class DashboardController extends Controller
         $dashboardMetrics['next_steps'] = $this->generateNextSteps($baselineData, $projectData);
         $recentActivity = $this->getRecentActivity($userId);
 
+        // Create recent activities array for the blade template
+        $recentActivities = collect($recentActivity)->map(function ($activity) {
+            return (object) [
+                'type' => $activity['type'],
+                'description' => $activity['description'],
+                'created_at' => $activity['date']
+            ];
+        });
+
+        // Calculate additional metrics
+        $totalEmissions = $this->calculateTotalEmissions($user);
+        $recentCalculations = $this->getRecentCalculations($user);
+
         // Return the view with all data
-        return view('dashboard', [
-            'dashboardMetrics' => $dashboardMetrics,
-            'baselineData' => $baselineData,
-            'projectData' => $projectData,
-            'recentActivity' => $recentActivity
-        ]);
+        return view('dashboard', compact(
+            'dashboardMetrics',
+            'baselineData',
+            'projectData',
+            'recentActivity',
+            'recentActivities',
+            'totalEmissions',
+            'recentCalculations'
+        ));
     }
 
     /**
@@ -256,6 +273,71 @@ class DashboardController extends Controller
         });
 
         return array_slice($activities, 0, 5); // Return last 5 activities
+    }
+
+    /**
+     * Calculate total emissions for a user
+     *
+     * @param User $user
+     * @return float
+     */
+    private function calculateTotalEmissions($user)
+    {
+        $baselineData = BaselineData::where('user_id', $user->id)->first();
+        $projectData = ProjectData::where('user_id', $user->id)->first();
+
+        $totalEmissions = 0;
+
+        if ($baselineData) {
+            $totalEmissions += $baselineData->emission_total;
+        }
+
+        if ($projectData) {
+            $totalEmissions += $projectData->emissions_after;
+        }
+
+        return $totalEmissions;
+    }
+
+    /**
+     * Get recent calculations for a user
+     *
+     * @param User $user
+     * @return \Illuminate\Support\Collection
+     */
+    private function getRecentCalculations($user)
+    {
+        $calculations = collect();
+
+        // Get recent baseline calculations
+        $baselineData = BaselineData::where('user_id', $user->id)
+            ->orderBy('updated_at', 'desc')
+            ->limit(5)
+            ->get();
+
+        foreach ($baselineData as $baseline) {
+            $calculations->push([
+                'type' => 'baseline',
+                'date' => $baseline->updated_at,
+                'description' => 'Baseline calculation: ' . round($baseline->emission_total, 3) . ' tCO₂e'
+            ]);
+        }
+
+        // Get recent project calculations
+        $projectData = ProjectData::where('user_id', $user->id)
+            ->orderBy('updated_at', 'desc')
+            ->limit(5)
+            ->get();
+
+        foreach ($projectData as $project) {
+            $calculations->push([
+                'type' => 'project',
+                'date' => $project->updated_at,
+                'description' => 'Project calculation: ' . round($project->credits_earned, 3) . ' tCO₂e credits'
+            ]);
+        }
+
+        return $calculations->sortByDesc('date')->take(5);
     }
 
     /**

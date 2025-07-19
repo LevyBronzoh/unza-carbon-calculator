@@ -37,12 +37,19 @@ class LoginController extends Controller
         $credentials = $request->only('email', 'password');
 
         if (Auth::attempt($credentials, $request->has('remember'))) {
-            // Authentication successful
-            $request->session()->regenerate();
+    // Authentication successful
+    $request->session()->regenerate();
 
-            // Redirect to dashboard after successful login
-            return redirect()->intended('/dashboard')->with('success', 'Welcome back!');
-        }
+    $user = Auth::user();
+
+    // Redirect based on user role (is_admin)
+    if ($user->is_admin) {
+        return redirect()->intended('/admin/dashboard')->with('success', 'Welcome back, Admin!');
+    }
+
+    return redirect()->intended('/dashboard')->with('success', 'Welcome back!');
+}
+
 
         // Authentication failed
         return back()->withErrors([

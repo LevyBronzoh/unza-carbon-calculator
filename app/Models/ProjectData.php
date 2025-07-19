@@ -38,8 +38,6 @@ class ProjectData extends Model
         'credits_earned',       // Carbon credits earned per month (tCO₂e)
     ];
 
-
-
     /**
      * The attributes that should be cast to native types.
      * Automatically converts database values to appropriate PHP types
@@ -53,7 +51,9 @@ class ProjectData extends Model
         'credits_earned' => 'float',      // Cast to float for calculations
         'start_date' => 'date',           // Cast to Carbon date object
         'created_at' => 'datetime',       // Cast to Carbon datetime object
-        'updated_at' => 'datetime',       // Cast to Carbon datetime object
+        'updated_at' => 'datetime',
+        'monthly_emissions' => 'float',
+        'annual_emissions' => 'float',      // Cast to Carbon datetime object
     ];
 
     /**
@@ -71,10 +71,11 @@ class ProjectData extends Model
     /**
      * Define relationship with BaselineData model
      * Project data references baseline data for comparison
+     * Using shorter method name 'baseline' for cleaner code
      *
      * @return \Illuminate\Database\Eloquent\Relations\BelongsTo
      */
-    public function baselineData()
+    public function baseline()
     {
         // Returns the baseline data record for this user (for comparison)
         return $this->belongsTo(BaselineData::class, 'user_id', 'user_id');
@@ -113,8 +114,13 @@ class ProjectData extends Model
      */
     public function calculateCarbonCredits(): float
     {
-        // Get the user's baseline data for comparison
-        $baselineData = $this->user->baselineData()->latest()->first();
+        // Get the user's baseline data for comparison using the baseline relationship
+        $baselineData = $this->user->baseline ?? null;
+
+        // Alternative: get latest baseline data if multiple records exist
+        if (!$baselineData) {
+            $baselineData = $this->user->baselineData()->latest()->first();
+        }
 
         // If no baseline data exists, return 0
         if (!$baselineData) {
@@ -153,8 +159,13 @@ class ProjectData extends Model
      */
     public function calculatePercentageReduction(): float
     {
-        // Get the user's baseline data for comparison
-        $baselineData = $this->user->baselineData()->latest()->first();
+        // Get the user's baseline data for comparison using the baseline relationship
+        $baselineData = $this->user->baseline ?? null;
+
+        // Alternative: get latest baseline data if multiple records exist
+        if (!$baselineData) {
+            $baselineData = $this->user->baselineData()->latest()->first();
+        }
 
         // If no baseline data exists, return 0
         if (!$baselineData) {
@@ -213,7 +224,8 @@ class ProjectData extends Model
     public function getCumulativeCarbonCredits(): float
     {
         // Calculate months since intervention started
-        $monthsSinceStart = now()->diffInMonths($this->start_date);
+        // Fixed: Call diffInMonths from start_date to now (correct direction)
+        $monthsSinceStart = $this->start_date->diffInMonths(now());
 
         // If intervention just started, count at least 1 month
         $monthsSinceStart = max(1, $monthsSinceStart);
@@ -233,8 +245,13 @@ class ProjectData extends Model
      */
     public function isMoreEfficient(): bool
     {
-        // Get the user's baseline data for comparison
-        $baselineData = $this->user->baselineData()->latest()->first();
+        // Get the user's baseline data for comparison using the baseline relationship
+        $baselineData = $this->user->baseline ?? null;
+
+        // Alternative: get latest baseline data if multiple records exist
+        if (!$baselineData) {
+            $baselineData = $this->user->baselineData()->latest()->first();
+        }
 
         // If no baseline data exists, assume project is better
         if (!$baselineData) {

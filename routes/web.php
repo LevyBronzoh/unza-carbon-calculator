@@ -11,12 +11,19 @@ use App\Http\Controllers\WeeklyUpdateController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\HomeController;
 use App\Http\Controllers\LoginController;
+use App\Http\Controllers\AdminController;
+use App\Http\Controllers\CalculatorController;
 
 // ======================
 // PUBLIC ROUTES
 // ======================
 
-// Home and static pages
+
+
+// Calculator route for storing data
+Route::post('/calculator', [CalculatorController::class, 'store'])
+    ->name('calculator.store');
+// Home page should be the default root
 Route::get('/', [HomeController::class, 'welcome'])->name('welcome');
 Route::get('/about', [HomeController::class, 'about'])->name('about');
 Route::get('/methodology', [HomeController::class, 'methodology'])->name('methodology');
@@ -24,7 +31,15 @@ Route::get('/contact', [HomeController::class, 'contact'])->name('contact');
 Route::post('/contact', [HomeController::class, 'contactSubmit'])->name('contact.submit');
 
 // Authentication routes
-Auth::routes(['register' => true]); // Enable registration if needed
+Auth::routes(['register' => true]); // Enable registration
+
+// Custom login/logout/register routes (optional override)
+Route::get('/login', [LoginController::class, 'showLoginForm'])->name('login');
+Route::post('/login', [LoginController::class, 'login']);
+Route::post('/logout', [LoginController::class, 'logout'])->name('logout');
+
+Route::get('/register', [LoginController::class, 'showRegisterForm'])->name('register');
+Route::post('/register', [LoginController::class, 'register']);
 
 // Success page (accessible without auth)
 Route::get('/success', [BaselineDataController::class, 'showSuccess'])->name('success.view');
@@ -34,9 +49,9 @@ Route::get('/success', [BaselineDataController::class, 'showSuccess'])->name('su
 // ======================
 Route::middleware(['auth'])->group(function () {
 
-    // Dashboard
-    Route::get('/dashboard', [DashboardController::class, 'index'])->name('dashboard');
+    // Home / Dashboard
     Route::get('/home', [HomeController::class, 'index'])->name('home');
+    Route::get('/dashboard', [DashboardController::class, 'index'])->name('dashboard');
 
     // Profile Management
     Route::prefix('profile')->group(function () {
@@ -58,12 +73,11 @@ Route::middleware(['auth'])->group(function () {
         Route::get('/{id}/edit', [BaselineDataController::class, 'edit'])->name('baseline.edit');
         Route::put('/{id}', [BaselineDataController::class, 'update'])->name('baseline.update');
 
-        // Legacy routes (if needed for backward compatibility)
         Route::get('/form', [BaselineDataController::class, 'showForm'])->name('baseline.form');
         Route::post('/submit', [BaselineDataController::class, 'submitData'])->name('baseline.submit');
     });
 
-    // Project Data (requires baseline)
+    // Project Data
     Route::prefix('project')->middleware('has.baseline')->group(function () {
         Route::get('/create', [ProjectDataController::class, 'create'])->name('project.create');
         Route::post('/', [ProjectDataController::class, 'store'])->name('project.store');
@@ -81,31 +95,25 @@ Route::middleware(['auth'])->group(function () {
     // Results and Tips
     Route::get('/results', [ResultsController::class, 'show'])->name('results.show');
     Route::get('/tips', [TipsController::class, 'index'])->name('tips.index');
+
+    // Calculator
+    Route::prefix('calculator')->group(function () {
+        Route::get('/', [CalculatorController::class, 'index'])->name('calculator.index');
+        Route::post('/', [CalculatorController::class, 'store'])->name('calculator.store');
+        Route::get('/create', [CalculatorController::class, 'create'])->name('calculator.create');
+        Route::get('/{id}', [CalculatorController::class, 'show'])->name('calculator.show');
+        Route::put('/{id}', [CalculatorController::class, 'update'])->name('calculator.update');
+        Route::delete('/{id}', [CalculatorController::class, 'destroy'])->name('calculator.destroy');
+        Route::post('/weekly-update', [CalculatorController::class, 'weeklyUpdate'])
+            ->name('calculator.weekly.update');
+        Route::post('/calculator/quick-calculate', [CalculatorController::class, 'quickCalculate'])
+        ->name('calculator.quick.calculate');
+    });
+
+    // Admin-only Routes
+    Route::middleware(['admin'])->prefix('admin')->group(function () {
+        Route::get('/dashboard', [DashboardController::class, 'adminDashboard'])->name('admin.dashboard');
+        Route::get('/export', [DashboardController::class, 'exportUserData'])->name('admin.export');
+        Route::get('/analytics', [AdminController::class, 'analytics'])->name('analytics.index');
+    });
 });
-// Authentication Routes
-Route::get('/login', [LoginController::class, 'showLoginForm'])->name('login');
-Route::post('/login', [LoginController::class, 'login']);
-Route::post('/logout', [LoginController::class, 'logout'])->name('logout');
-
-// Registration Routes
-Route::get('/register', [LoginController::class, 'showRegisterForm'])->name('register');
-Route::post('/register', [LoginController::class, 'register']);
-
-// Dashboard Route (protected)
-Route::get('/dashboard', function () {
-    return view('dashboard');
-})->middleware('auth')->name('dashboard');
-// In web.php or routes file
-Route::get('/dashboard', [DashboardController::class, 'index'])->name('dashboard');
-
-// Redirect root to login
-Route::get('/', function () {
-    return redirect('/login');
-});
-
-Auth::routes();
-
-Route::get('/home', [App\Http\Controllers\HomeController::class, 'index'])->name('home');
-// Admin dashboard routes (for staff only)
-Route::get('/admin/dashboard', [DashboardController::class, 'adminDashboard'])->name('admin.dashboard');
-Route::get('/admin/export', [DashboardController::class, 'exportUserData'])->name('admin.export');
