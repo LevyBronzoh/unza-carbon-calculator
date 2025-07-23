@@ -18,6 +18,7 @@ class Calculation extends Model
         'annual_emissions',
         'weekly_emissions',
         'emission_reduction',
+        'credit_earned',
     ];
 
     protected $casts = [

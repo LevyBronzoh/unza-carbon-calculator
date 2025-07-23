@@ -4,10 +4,13 @@ namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Cache;
 use App\Models\BaselineData;
 use App\Models\ProjectData;
 use App\Models\Calculation;
-use Illuminate\Support\Facades\Cache;
+use Carbon\Carbon;
+use Illuminate\Support\Facades\Log;
+use App\Models\Tip;
 
 class CalculatorController extends Controller
 {
@@ -15,6 +18,9 @@ class CalculatorController extends Controller
     const CACHE_EMISSION_FACTORS = 'emission_factors';
     const CACHE_STOVE_EFFICIENCIES = 'stove_efficiencies';
 
+    /**
+     * Get emission factors with caching
+     */
     protected function getEmissionFactors()
     {
         return Cache::rememberForever(self::CACHE_EMISSION_FACTORS, function () {
@@ -22,60 +28,58 @@ class CalculatorController extends Controller
                 'wood' => 0.001747,
                 'charcoal' => 0.00674,
                 'lpg' => 0.002983,
-                'electricity' => 0.00085, // Zambia grid average (tCO₂e/kWh)
-                'kerosene' => 0.00271,
-                'ethanol' => 0.00195,
+                'electricity' => 0.00085, // Zambia grid average
+                'kerosene' => 0.002533,
+                'ethanol' => 0.001915
             ];
         });
     }
 
+    /**
+     * Get stove efficiencies with caching
+     */
     protected function getStoveEfficiencies()
     {
         return Cache::rememberForever(self::CACHE_STOVE_EFFICIENCIES, function () {
             return [
                 '3_stone_fire' => 0.10,
-                'charcoal_brazier' => 0.10,
+                'charcoal_brazier' => 0.15,
                 'kerosene_stove' => 0.45,
                 'lpg_stove' => 0.55,
                 'electric_stove' => 0.75,
                 'improved_biomass' => 0.25,
                 'improved_charcoal' => 0.25,
                 'biogas_stove' => 0.60,
-                'induction_cooker' => 0.85,
+                'induction_cooker' => 0.85
             ];
         });
     }
 
+    /**
+     * Show calculator dashboard
+     */
     public function index()
     {
         try {
             $user = Auth::user();
 
-            // Get user's baseline and project data
-            $baselineData = BaselineData::where('user_id', $user->id)
-                ->latest()
-                ->first();
+                        $baselineData = BaselineData::where('user_id', $user->id)->first();
+                        $projectData = ProjectData::where('user_id', $user->id)->first();
+                        $calculations = Calculation::where('user_id', $user->id)
+                        ->orderBy('created_at', 'desc')
+                        ->paginate(10);
 
-            $projectData = ProjectData::where('user_id', $user->id)
-                ->latest()
-                ->first();
 
-            // Get calculation history
-            $calculations = Calculation::where('user_id', $user->id)
-                ->orderBy('created_at', 'desc')
-                ->paginate(10);
-
-            // Calculate current emissions if both baseline and project exist
             $currentEmissions = null;
             if ($baselineData && $projectData) {
                 $currentEmissions = $this->calculateEmissionReduction($baselineData, $projectData);
             }
 
             return view('calculator.index', compact(
-                'calculations',
                 'baselineData',
                 'projectData',
-                'currentEmissions'
+                'currentEmissions',
+                'calculations'
             ));
 
         } catch (\Exception $e) {
@@ -84,15 +88,12 @@ class CalculatorController extends Controller
         }
     }
 
-   public function create(Request $request, $type = null)
+    /**
+     * Show create form
+     */
+    public function create(Request $request)
     {
-        // Get type from route parameter, query string, or default to baseline
-        $type = $type ?? $request->get('type', 'baseline');
-
-        // Validate type parameter
-        if (!in_array($type, ['baseline', 'project'])) {
-            $type = 'baseline';
-        }
+        $type = $request->get('type', 'baseline');
 
         $stoveTypes = [
             '3_stone_fire' => '3-Stone Fire',
@@ -115,17 +116,17 @@ class CalculatorController extends Controller
             'ethanol' => 'Ethanol',
         ];
 
-        return view('calculator.create', compact('stoveTypes', 'fuelTypes', 'type'));
+        return view('calculator.create', compact('type', 'stoveTypes', 'fuelTypes'));
     }
 
+    /**
+     * Store calculation data
+     */
     public function store(Request $request)
     {
         $validated = $this->validateRequest($request);
 
         try {
-            $user = Auth::user();
-
-            // Handle AJAX request
             if ($request->wantsJson()) {
                 $monthlyEmissions = $this->calculateBaselineEmissions($validated);
                 return response()->json([
@@ -135,14 +136,13 @@ class CalculatorController extends Controller
                 ]);
             }
 
-            // Handle regular form submission
             switch ($validated['calculation_type']) {
                 case 'baseline':
-                    return $this->storeBaseline($request, $user);
+                    return $this->storeBaseline($request);
                 case 'project':
-                    return $this->storeProject($request, $user);
+                    return $this->storeProject($request);
                 default:
-                    return $this->storeQuickCalculation($request, $user);
+                    return $this->storeQuickCalculation($request);
             }
 
         } catch (\Exception $e) {
@@ -151,6 +151,9 @@ class CalculatorController extends Controller
         }
     }
 
+    /**
+     * Validate request data
+     */
     protected function validateRequest(Request $request)
     {
         return $request->validate([
@@ -169,29 +172,50 @@ class CalculatorController extends Controller
         ]);
     }
 
-    private function storeBaseline(Request $request, $user)
-    {
-        $monthlyEmissions = $this->calculateBaselineEmissions($request->all());
-        $stoveEfficiency = $request->stove_efficiency ?? $this->getStoveEfficiencies()[$request->stove_type];
+    /**
+     * Store baseline data
+     */
+    /**
+ * Store baseline data - Fixed version
+ */
+private function storeBaseline(Request $request)
+{
+    $stoveType = $request->input('stove_type');
+    $fuelType = $request->input('fuel_type');
 
-        // Store baseline data
-        BaselineData::updateOrCreate(
-            ['user_id' => $user->id],
+    // Get efficiency - fix the fallback logic
+    $stoveEfficiency = $request->input('stove_efficiency');
+    if (!$stoveEfficiency) {
+        $efficiencies = $this->getStoveEfficiencies();
+        $stoveEfficiency = $efficiencies[$stoveType] ?? 0.10; // Default fallback
+    }
+
+    // Get emission factor
+    $emissionFactors = $this->getEmissionFactors();
+    $emissionFactor = $emissionFactors[$fuelType] ?? 0;
+
+    // Calculate emissions
+    $monthlyEmissions = $this->calculateBaselineEmissions($request->all());
+
+    try {
+        $baselineData = BaselineData::updateOrCreate(
+            ['user_id' => Auth::id()],
             [
-                'stove_type' => $request->stove_type,
-                'fuel_type' => $request->fuel_type,
-                'daily_fuel_use' => $request->daily_fuel_use,
-                'daily_cooking_hours' => $request->daily_cooking_hours,
-                'household_size' => $request->household_size,
-                'stove_efficiency' => $stoveEfficiency,
+                'stove_type' => $stoveType,
+                'fuel_type' => $fuelType,
+                'daily_fuel_use' => (float) $request->input('daily_fuel_use'),
+                'daily_cooking_hours' => (float) $request->input('daily_cooking_hours'),
+                'household_size' => (int) $request->input('household_size'),
+                'stove_efficiency' => (float) $stoveEfficiency,
                 'monthly_emissions' => $monthlyEmissions,
                 'annual_emissions' => $monthlyEmissions * 12,
+                'emission_factor' => $emissionFactor
             ]
         );
 
-        // Store calculation record
+        // Create calculation record
         Calculation::create([
-            'user_id' => $user->id,
+            'user_id' => Auth::id(),
             'type' => 'baseline',
             'data' => json_encode($request->except('_token')),
             'monthly_emissions' => $monthlyEmissions,
@@ -199,73 +223,80 @@ class CalculatorController extends Controller
         ]);
 
         return redirect()->route('calculator.index')
-            ->with('success', 'Baseline data saved successfully!')
-            ->with('emissions', [
-                'monthly' => $monthlyEmissions,
-                'annual' => $monthlyEmissions * 12,
-                'type' => 'baseline'
-            ]);
-    }
+            ->with('success', 'Baseline data saved! Monthly: ' .
+                  number_format($monthlyEmissions, 4) . ' tCO₂e');
 
-    private function storeProject(Request $request, $user)
+    } catch (\Exception $e) {
+        Log::error('Failed to save baseline data: ' . $e->getMessage());
+        return redirect()->back()
+            ->with('error', 'Failed to save baseline data: ' . $e->getMessage())
+            ->withInput();
+    }
+}
+    /**
+     * Store project data
+     */
+    private function storeProject(Request $request)
     {
-        // Check if baseline exists
-        $baselineData = BaselineData::where('user_id', $user->id)->first();
+        $baselineData = BaselineData::where('user_id', Auth::id())->first();
         if (!$baselineData) {
             return redirect()->route('calculator.create')
-                ->with('error', 'Please enter your baseline data first before adding project data.');
+                ->with('error', 'Please set baseline data first');
         }
 
-        // Calculate project emissions
         $monthlyEmissions = $this->calculateProjectEmissions($request->all());
         $stoveEfficiency = $request->stove_efficiency ?? $this->getStoveEfficiencies()[$request->stove_type];
 
-        // Store project data
-        $projectData = ProjectData::updateOrCreate(
-            ['user_id' => $user->id],
+        // Calculate emission reduction
+        $monthlyReduction = $baselineData->monthly_emissions - $monthlyEmissions;
+        $percentageReduction = ($monthlyReduction / $baselineData->monthly_emissions) * 100;
+
+        // Calculate total credits
+        $monthsElapsed = Carbon::parse($request->input('start_date'))->diffInMonths(now());
+        $totalCredits = max(0, $monthlyReduction * $monthsElapsed);
+
+        ProjectData::updateOrCreate(
+            ['user_id' => Auth::id()],
             [
-                'new_stove_type' => $request->stove_type,
-                'new_fuel_type' => $request->fuel_type,
-                'daily_fuel_use' => $request->daily_fuel_use,
-                'daily_cooking_hours' => $request->daily_cooking_hours,
-                'stove_efficiency' => $stoveEfficiency,
-                'start_date' => $request->start_date,
-                'monthly_emissions' => $monthlyEmissions,
-                'annual_emissions' => $monthlyEmissions * 12,
+                'new_stove_type' => $request->input('stove_type'),
+            'new_fuel_type' => $request->input('fuel_type'),
+            'fuel_use_project' => $request->input('daily_fuel_use'),
+            'new_efficiency' => $stoveEfficiency,
+            'start_date' => $request->input('start_date'),
+            'monthly_emissions' => $monthlyEmissions,
+            'annual_emissions' => $monthlyEmissions * 12,
+            'monthly_reduction' => $monthlyReduction,
+            'percentage_reduction' => $percentageReduction,
+            'total_credits' => $totalCredits,
+            'emission_factor' => $this->getEmissionFactors()[$request->input('fuel_type')] ?? 0
             ]
         );
 
-        // Calculate emission reduction
-        $emissionReduction = $this->calculateEmissionReduction($baselineData, $projectData);
-
-        // Store calculation record
         Calculation::create([
-            'user_id' => $user->id,
+            'user_id' => Auth::id(),
             'type' => 'project',
             'data' => json_encode($request->except('_token')),
             'monthly_emissions' => $monthlyEmissions,
             'annual_emissions' => $monthlyEmissions * 12,
-            'emission_reduction' => $emissionReduction['monthly_reduction'],
-            'credit_earned' => $this->calculateCredits($emissionReduction),
+            'emission_reduction' => $monthlyReduction,
+            'credit_earned' => $monthlyReduction,
         ]);
 
         return redirect()->route('calculator.index')
-            ->with('success', 'Project data saved successfully!')
-            ->with('emissions', [
-                'monthly' => $monthlyEmissions,
-                'annual' => $monthlyEmissions * 12,
-                'reduction' => $emissionReduction,
-                'type' => 'project'
-            ]);
+            ->with('success', 'Project saved! Reduction: ' .
+                  number_format($monthlyReduction, 4) . ' tCO₂e/month (' .
+                  number_format($percentageReduction, 1) . '%)');
     }
 
-    private function storeQuickCalculation(Request $request, $user)
+    /**
+     * Store quick calculation
+     */
+    private function storeQuickCalculation(Request $request)
     {
         $monthlyEmissions = $this->calculateQuickEmissions($request->all());
 
-        // Store calculation record
         Calculation::create([
-            'user_id' => $user->id,
+            'user_id' => Auth::id(),
             'type' => 'quick',
             'data' => json_encode($request->except('_token')),
             'monthly_emissions' => $monthlyEmissions,
@@ -273,60 +304,37 @@ class CalculatorController extends Controller
         ]);
 
         return redirect()->route('calculator.index')
-            ->with('success', 'Quick calculation completed!')
-            ->with('emissions', [
-                'monthly' => $monthlyEmissions,
-                'annual' => $monthlyEmissions * 12,
-                'type' => 'quick'
-            ]);
+            ->with('success', 'Quick calculation: ' .
+                  number_format($monthlyEmissions, 4) . ' tCO₂e/month');
     }
 
     /**
-     * Calculate baseline emissions using Verra VM0042 methodology
-     * Formula: E_baseline = (F_baseline × EF_fuel) / η_baseline
+     * Calculate baseline emissions (Verra VM0042)
      */
     private function calculateBaselineEmissions(array $data)
-    {
-        $dailyFuelUse = $data['daily_fuel_use']; // kg or kWh per day
-        $fuelType = $data['fuel_type'];
-        $stoveEfficiency = $data['stove_efficiency'] ?? $this->getStoveEfficiencies()[$data['stove_type']];
+        {
+            $monthlyFuel = $data['daily_fuel_use'] * 30;
 
-        // Monthly fuel consumption (30 days)
-        $monthlyFuelConsumption = $dailyFuelUse * 30;
+            $fuelType = $data['fuel_type'] ?? 0;
+            $emissionFactor = $this->getEmissionFactors()[$fuelType];
 
-        // Get emission factor
-        $emissionFactor = $this->getEmissionFactors()[$fuelType] ?? 0;
+            $stoveType = $data['stove_type'] ?? null;
+            $efficiency = $data['stove_efficiency'] ?? $this->getStoveEfficiencies()[$stoveType];
 
-        // Calculate monthly emissions (tCO₂e)
-        $monthlyEmissions = ($monthlyFuelConsumption * $emissionFactor) / $stoveEfficiency;
+            return round(($monthlyFuel * $emissionFactor) / $efficiency, 6);
+        }
 
-        return round($monthlyEmissions, 6);
-    }
 
     /**
-     * Calculate project emissions using Verra VM0042 methodology
-     * Formula: E_project = (F_project × EF_fuel) / η_project
+     * Calculate project emissions (Verra VM0042)
      */
     private function calculateProjectEmissions(array $data)
     {
-        $dailyFuelUse = $data['daily_fuel_use']; // kg or kWh per day
-        $fuelType = $data['fuel_type'];
-        $stoveEfficiency = $data['stove_efficiency'] ?? $this->getStoveEfficiencies()[$data['stove_type']];
-
-        // Monthly fuel consumption (30 days)
-        $monthlyFuelConsumption = $dailyFuelUse * 30;
-
-        // Get emission factor
-        $emissionFactor = $this->getEmissionFactors()[$fuelType] ?? 0;
-
-        // Calculate monthly emissions (tCO₂e)
-        $monthlyEmissions = ($monthlyFuelConsumption * $emissionFactor) / $stoveEfficiency;
-
-        return round($monthlyEmissions, 6);
+        return $this->calculateBaselineEmissions($data);
     }
 
     /**
-     * Calculate quick emissions (simplified calculation)
+     * Quick calculation
      */
     private function calculateQuickEmissions(array $data)
     {
@@ -334,82 +342,22 @@ class CalculatorController extends Controller
     }
 
     /**
-     * Calculate emission reduction (Carbon Credits)
-     * Formula: ER = E_baseline - E_project
+     * Calculate emission reduction
      */
-    private function calculateEmissionReduction($baselineData, $projectData)
+    private function calculateEmissionReduction($baseline, $project)
     {
-        $baselineMonthly = is_array($baselineData) ? $baselineData['monthly_emissions'] : $baselineData->monthly_emissions;
-        $projectMonthly = is_array($projectData) ? $projectData['monthly_emissions'] : $projectData->monthly_emissions;
-
-        $monthlyReduction = $baselineMonthly - $projectMonthly;
-        $annualReduction = $monthlyReduction * 12;
-
-        // Calculate percentage reduction
-        $percentageReduction = $baselineMonthly > 0 ? ($monthlyReduction / $baselineMonthly) * 100 : 0;
+        $monthlyReduction = $baseline->monthly_emissions - $project->monthly_emissions;
+        $percentage = ($monthlyReduction / $baseline->monthly_emissions) * 100;
 
         return [
             'monthly_reduction' => round($monthlyReduction, 6),
-            'annual_reduction' => round($annualReduction, 6),
-            'percentage_reduction' => round($percentageReduction, 2),
-            'baseline_monthly' => $baselineMonthly,
-            'project_monthly' => $projectMonthly,
+            'annual_reduction' => round($monthlyReduction * 12, 6),
+            'percentage_reduction' => round($percentage, 2)
         ];
     }
 
-    private function calculateCredits(array $emissionReduction)
-    {
-        // 1 tonne CO₂e = 1 carbon credit
-        return $emissionReduction['monthly_reduction'];
-    }
-
-    public function show($id)
-    {
-        $calculation = Calculation::where('id', $id)
-            ->where('user_id', Auth::id())
-            ->firstOrFail();
-
-        return view('calculator.show', compact('calculation'));
-    }
-
-    public function update(Request $request, $id)
-    {
-        $calculation = Calculation::where('id', $id)
-            ->where('user_id', Auth::id())
-            ->firstOrFail();
-
-        // Update calculation logic here
-        $calculation->update($request->validated());
-
-        return redirect()->route('calculator.index')
-            ->with('success', 'Calculation updated successfully!');
-    }
-
-    public function destroy($id)
-    {
-        $calculation = Calculation::where('id', $id)
-            ->where('user_id', Auth::id())
-            ->firstOrFail();
-
-        $calculation->delete();
-
-        return redirect()->route('calculator.index')
-            ->with('success', 'Calculation deleted successfully!');
-    }
-
     /**
-     * API endpoint to get emission factors and stove efficiencies
-     */
-    public function getEmissionData()
-    {
-        return response()->json([
-            'emission_factors' => $this->getEmissionFactors(),
-            'stove_efficiencies' => $this->getStoveEfficiencies(),
-        ]);
-    }
-
-    /**
-     * Weekly update endpoint for users to track progress
+     * Weekly update handler
      */
     public function weeklyUpdate(Request $request)
     {
@@ -422,38 +370,32 @@ class CalculatorController extends Controller
         try {
             $user = Auth::user();
             $projectData = ProjectData::where('user_id', $user->id)->firstOrFail();
-
-            // Calculate actual emissions for the week
             $weeklyEmissions = $this->calculateWeeklyEmissions($validated, $projectData);
 
-            // Store weekly tracking data
             Calculation::create([
                 'user_id' => $user->id,
                 'type' => 'weekly_update',
                 'data' => json_encode($validated),
                 'weekly_emissions' => $weeklyEmissions,
-                'monthly_emissions' => $weeklyEmissions * 4.33, // Average weeks per month
+                'monthly_emissions' => $weeklyEmissions * 4.33,
                 'annual_emissions' => $weeklyEmissions * 52,
             ]);
 
-            // Update cumulative credits
-            $baselineData = BaselineData::where('user_id', $user->id)->first();
-            if ($baselineData) {
-                $emissionReduction = $this->calculateEmissionReduction(
-                    $baselineData,
+            // Update credits if baseline exists
+        if ($baseline = BaselineData::where('user_id', Auth::id())->first())
+    {
+                $reduction = $this->calculateEmissionReduction(
+                    $baseline,
                     ['monthly_emissions' => $weeklyEmissions * 4.33]
                 );
-
-                $projectData->increment('total_credits', $emissionReduction['monthly_reduction'] / 4.33);
+                $projectData->increment('total_credits', $reduction['monthly_reduction'] / 4.33);
             }
 
             return redirect()->route('calculator.index')
-                ->with('success', 'Weekly update recorded successfully!')
+                ->with('success', 'Weekly update recorded!')
                 ->with('emissions', [
                     'weekly' => $weeklyEmissions,
-                    'monthly' => $weeklyEmissions * 4.33,
-                    'annual' => $weeklyEmissions * 52,
-                    'type' => 'weekly_update'
+                    'monthly' => $weeklyEmissions * 4.33
                 ]);
 
         } catch (\Exception $e) {
@@ -462,21 +404,26 @@ class CalculatorController extends Controller
         }
     }
 
+    /**
+     * Calculate weekly emissions
+     */
     private function calculateWeeklyEmissions(array $data, $projectData)
     {
-        $dailyFuelUse = $data['actual_fuel_use'] / 7; // Convert weekly to daily
-        $fuelType = $projectData->new_fuel_type;
-        $stoveEfficiency = $projectData->stove_efficiency;
+        $weeklyFuel = $data['actual_fuel_use'];
+        $emissionFactor = $this->getEmissionFactors()[$projectData->new_fuel_type] ?? 0;
+        $efficiency = $projectData->new_efficiency;
 
-        // Weekly fuel consumption
-        $weeklyFuelConsumption = $data['actual_fuel_use'];
+        return round(($weeklyFuel * $emissionFactor) / $efficiency, 6);
+    }
 
-        // Get emission factor
-        $emissionFactor = $this->getEmissionFactors()[$fuelType] ?? 0;
-
-        // Calculate weekly emissions (tCO₂e)
-        $weeklyEmissions = ($weeklyFuelConsumption * $emissionFactor) / $stoveEfficiency;
-
-        return round($weeklyEmissions, 6);
+    /**
+     * API endpoint for emission data
+     */
+    public function getEmissionData()
+    {
+        return response()->json([
+            'emission_factors' => $this->getEmissionFactors(),
+            'stove_efficiencies' => $this->getStoveEfficiencies()
+        ]);
     }
 }

@@ -116,4 +116,8 @@ Route::middleware(['auth'])->group(function () {
         Route::get('/export', [DashboardController::class, 'exportUserData'])->name('admin.export');
         Route::get('/analytics', [AdminController::class, 'analytics'])->name('analytics.index');
     });
+
+    Route::post('/baseline/calculate', [BaselineDataController::class, 'calculate'])
+    ->name('baseline.calculate');
+    Route::resource('baseline', BaselineDataController::class);
 });

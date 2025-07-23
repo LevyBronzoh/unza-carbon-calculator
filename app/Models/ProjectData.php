@@ -4,27 +4,26 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Carbon;
 
 /**
  * ProjectData Model for UNZA Carbon Calculator
  *
- * This class handles the storage and calculation of project cooking emissions data
+ * Handles storage and calculation of project cooking emissions data
  * (after intervention with cleaner cooking methods)
- * Extends Laravel's Model class (Polymorphism) - inherits Eloquent ORM functionality
  *
  * @author Levy Bronzoh, Climate Yanga
- * @version 1.0
+ * @version 1.1
  * @since 2025-07-12
  */
 class ProjectData extends Model
 {
-    // Uses Laravel factory trait for database seeding and testing
     use HasFactory;
 
+    protected $table = 'project_data';
+
     /**
-     * The attributes that are mass assignable.
-     * Allows these fields to be filled using create() or update() methods
-     *
+     * The attributes that are mass assignable
      * @var array<int, string>
      */
     protected $fillable = [
@@ -34,117 +33,117 @@ class ProjectData extends Model
         'fuel_use_project',     // Amount of fuel used per day after intervention (kg or liters)
         'new_efficiency',       // New stove efficiency as decimal (e.g., 0.25 for 25%)
         'start_date',           // Date when cleaner cooking intervention started
-        'emissions_after',      // Monthly emissions after intervention (tCO₂e)
-        'credits_earned',       // Carbon credits earned per month (tCO₂e)
+        'monthly_emissions',    // Monthly emissions after intervention (tCO₂e)
+        'annual_emissions',     // Annual emissions after intervention (tCO₂e)
+        'monthly_reduction',    // Monthly emission reduction (tCO₂e)
+        'annual_reduction',     // Annual emission reduction (tCO₂e)
+        'percentage_reduction', // Percentage reduction in emissions
+        'total_credits',        // Total carbon credits earned
+        'emission_factor',      // Emission factor for the new fuel type
+        'emissions_after',      // (Legacy) Monthly emissions after intervention
+        'credits_earned'        // (Legacy) Carbon credits earned per month
     ];
 
     /**
-     * The attributes that should be cast to native types.
-     * Automatically converts database values to appropriate PHP types
-     *
+     * The attributes that should be cast
      * @var array<string, string>
      */
     protected $casts = [
-        'fuel_use_project' => 'float',    // Cast to float for calculations
-        'new_efficiency' => 'float',      // Cast to float for calculations
-        'emissions_after' => 'float',     // Cast to float for calculations
-        'credits_earned' => 'float',      // Cast to float for calculations
-        'start_date' => 'date',           // Cast to Carbon date object
-        'created_at' => 'datetime',       // Cast to Carbon datetime object
+        'fuel_use_project' => 'decimal:4',
+        'new_efficiency' => 'decimal:4',
+        'monthly_emissions' => 'decimal:4',
+        'annual_emissions' => 'decimal:4',
+        'monthly_reduction' => 'decimal:4',
+        'annual_reduction' => 'decimal:4',
+        'percentage_reduction' => 'decimal:2',
+        'total_credits' => 'decimal:4',
+        'emission_factor' => 'decimal:6',
+        'emissions_after' => 'decimal:4',
+        'credits_earned' => 'decimal:4',
+        'created_at' => 'datetime',
         'updated_at' => 'datetime',
-        'monthly_emissions' => 'float',
-        'annual_emissions' => 'float',      // Cast to Carbon datetime object
+        'start_date' => 'datetime',
     ];
 
     /**
-     * Define relationship with User model
-     * Many project data entries belong to one user (Many-to-One relationship)
-     *
-     * @return \Illuminate\Database\Eloquent\Relations\BelongsTo
+     * Emission factors (tCO₂e per kg or liter)
+     * @var array<string, float>
+     */
+    public static $emissionFactors = [
+        'wood' => 0.001747,
+        'charcoal' => 0.00674,
+        'lpg' => 0.002983,
+        'electricity' => 0.00085,
+        'kerosene' => 0.002533,
+        'ethanol' => 0.001915
+    ];
+
+    /**
+     * Default stove efficiencies
+     * @var array<string, float>
+     */
+    public static $defaultEfficiencies = [
+        '3_stone_fire' => 0.10,
+        'charcoal_brazier' => 0.15,
+        'kerosene_stove' => 0.45,
+        'lpg_stove' => 0.55,
+        'electric_stove' => 0.75,
+        'improved_biomass' => 0.25,
+        'improved_charcoal' => 0.25,
+        'biogas_stove' => 0.60,
+        'induction_cooker' => 0.85
+    ];
+
+    /**
+     * Relationship: Project data belongs to a user
      */
     public function user()
     {
-        // Returns the user who owns this project data record
         return $this->belongsTo(User::class);
     }
 
     /**
-     * Define relationship with BaselineData model
-     * Project data references baseline data for comparison
-     * Using shorter method name 'baseline' for cleaner code
-     *
-     * @return \Illuminate\Database\Eloquent\Relations\BelongsTo
+     * Relationship: Project data references baseline data
      */
     public function baseline()
     {
-        // Returns the baseline data record for this user (for comparison)
         return $this->belongsTo(BaselineData::class, 'user_id', 'user_id');
     }
 
     /**
      * Calculate monthly project emissions using Verra VM0042 methodology
      * Formula: E_project = (F_project × EF_fuel) / η_project
-     *
-     * @return float Monthly emissions in tCO₂e after intervention
      */
     public function calculateMonthlyProjectEmissions(): float
     {
-        // Get the emission factor for the new fuel type (defaults to 0 if not found)
-        $emissionFactor = BaselineData::$emissionFactors[strtolower($this->new_fuel_type)] ?? 0;
-
-        // Calculate monthly fuel consumption (daily use × 30 days)
+        $emissionFactor = self::$emissionFactors[strtolower($this->new_fuel_type)] ?? 0;
         $monthlyFuelUse = $this->fuel_use_project * 30;
-
-        // Get efficiency value (use stored efficiency or default if not set)
         $efficiency = $this->new_efficiency > 0 ? $this->new_efficiency :
-                     (BaselineData::$defaultEfficiencies[strtolower($this->new_stove_type)] ?? 0.25);
+                     (self::$defaultEfficiencies[strtolower($this->new_stove_type)] ?? 0.25);
 
-        // Calculate emissions using Verra VM0042 formula
-        // E_project = (Monthly_Fuel_Use × Emission_Factor) / Efficiency
-        $emissions = ($monthlyFuelUse * $emissionFactor) / $efficiency;
-
-        return round($emissions, 4); // Round to 4 decimal places for precision
+        return round(($monthlyFuelUse * $emissionFactor) / $efficiency, 4);
     }
 
     /**
      * Calculate carbon credits earned (emission reduction)
      * Formula: ER = E_baseline - E_project
-     *
-     * @return float Monthly carbon credits earned in tCO₂e
      */
     public function calculateCarbonCredits(): float
     {
-        // Get the user's baseline data for comparison using the baseline relationship
-        $baselineData = $this->user->baseline ?? null;
+        $baselineData = BaselineData::where('user_id', $this->user_id)->first();
 
-        // Alternative: get latest baseline data if multiple records exist
-        if (!$baselineData) {
-            $baselineData = $this->user->baselineData()->latest()->first();
-        }
-
-        // If no baseline data exists, return 0
         if (!$baselineData) {
             return 0;
         }
 
-        // Calculate baseline emissions
-        $baselineEmissions = $baselineData->calculateMonthlyEmissions();
+        $emissionReduction = $baselineData->calculateMonthlyEmissions() -
+                           $this->calculateMonthlyProjectEmissions();
 
-        // Calculate project emissions
-        $projectEmissions = $this->calculateMonthlyProjectEmissions();
-
-        // Calculate emission reduction (carbon credits)
-        $emissionReduction = $baselineEmissions - $projectEmissions;
-
-        // Ensure we don't have negative credits (project should reduce emissions)
         return max(0, round($emissionReduction, 4));
     }
 
     /**
-     * Calculate annual carbon credits earned
-     * Simply multiplies monthly credits by 12
-     *
-     * @return float Annual carbon credits earned in tCO₂e
+     * Calculate annual carbon credits
      */
     public function calculateAnnualCarbonCredits(): float
     {
@@ -153,140 +152,109 @@ class ProjectData extends Model
 
     /**
      * Calculate percentage reduction in emissions
-     * Shows how much emissions were reduced compared to baseline
-     *
-     * @return float Percentage reduction (0-100)
      */
     public function calculatePercentageReduction(): float
     {
-        // Get the user's baseline data for comparison using the baseline relationship
-        $baselineData = $this->user->baseline ?? null;
+        $baselineData = BaselineData::where('user_id', $this->user_id)->first();
 
-        // Alternative: get latest baseline data if multiple records exist
-        if (!$baselineData) {
-            $baselineData = $this->user->baselineData()->latest()->first();
-        }
-
-        // If no baseline data exists, return 0
         if (!$baselineData) {
             return 0;
         }
 
-        // Calculate baseline emissions
         $baselineEmissions = $baselineData->calculateMonthlyEmissions();
 
-        // If baseline is 0, avoid division by zero
         if ($baselineEmissions == 0) {
             return 0;
         }
 
-        // Calculate project emissions
-        $projectEmissions = $this->calculateMonthlyProjectEmissions();
+        $percentage = (($baselineEmissions - $this->calculateMonthlyProjectEmissions()) /
+                      $baselineEmissions) * 100;
 
-        // Calculate percentage reduction: ((Baseline - Project) / Baseline) × 100
-        $percentageReduction = (($baselineEmissions - $projectEmissions) / $baselineEmissions) * 100;
-
-        // Ensure percentage is between 0 and 100
-        return max(0, min(100, round($percentageReduction, 2)));
+        return max(0, min(100, round($percentage, 2)));
     }
 
     /**
-     * Get formatted project emission factor for display
-     * Returns the emission factor with proper formatting
-     *
-     * @return string Formatted emission factor
+     * Get formatted project emission factor
      */
     public function getFormattedProjectEmissionFactor(): string
     {
-        $factor = BaselineData::$emissionFactors[strtolower($this->new_fuel_type)] ?? 0;
+        $factor = self::$emissionFactors[strtolower($this->new_fuel_type)] ?? 0;
         return number_format($factor, 6) . ' tCO₂e/kg';
     }
 
     /**
-     * Get formatted project efficiency percentage for display
-     * Converts decimal efficiency to percentage format
-     *
-     * @return string Formatted efficiency percentage
+     * Get formatted project efficiency percentage
      */
     public function getFormattedProjectEfficiency(): string
     {
         $efficiency = $this->new_efficiency > 0 ? $this->new_efficiency :
-                     (BaselineData::$defaultEfficiencies[strtolower($this->new_stove_type)] ?? 0.25);
-        return (($efficiency * 100) . '%');
+                     (self::$defaultEfficiencies[strtolower($this->new_stove_type)] ?? 0.25);
+        return ($efficiency * 100) . '%';
     }
 
     /**
      * Get cumulative carbon credits earned since start date
-     * Calculates total credits from start date to current date
-     *
-     * @return float Total carbon credits earned since intervention started
      */
     public function getCumulativeCarbonCredits(): float
     {
-        // Calculate months since intervention started
-        // Fixed: Call diffInMonths from start_date to now (correct direction)
-        $monthsSinceStart = $this->start_date->diffInMonths(now());
+        // Check if start_date exists and is valid
+        if (!$this->start_date) {
+            return 0.0;
+        }
 
-        // If intervention just started, count at least 1 month
-        $monthsSinceStart = max(1, $monthsSinceStart);
+        // Ensure we have a Carbon instance (works with both strings and Carbon objects)
+        $startDate = $this->start_date instanceof \Carbon\Carbon
+            ? $this->start_date
+            : \Carbon\Carbon::parse($this->start_date);
 
-        // Calculate total credits earned
-        $monthlyCredits = $this->calculateCarbonCredits();
-        $totalCredits = $monthlyCredits * $monthsSinceStart;
+        // Calculate months since start (minimum 1 month)
+        $monthsSinceStart = max(1, $startDate->diffInMonths(now()));
 
-        return round($totalCredits, 4);
+        return round($this->calculateCarbonCredits() * $monthsSinceStart, 4);
     }
 
     /**
-     * Check if this project intervention is more efficient than baseline
-     * Compares project efficiency with baseline efficiency
-     *
-     * @return bool True if project is more efficient than baseline
+     * Check if project is more efficient than baseline
      */
     public function isMoreEfficient(): bool
     {
-        // Get the user's baseline data for comparison using the baseline relationship
-        $baselineData = $this->user->baseline ?? null;
+        $baselineData = BaselineData::where('user_id', $this->user_id)->first();
 
-        // Alternative: get latest baseline data if multiple records exist
-        if (!$baselineData) {
-            $baselineData = $this->user->baselineData()->latest()->first();
-        }
-
-        // If no baseline data exists, assume project is better
         if (!$baselineData) {
             return true;
         }
 
-        // Get baseline efficiency
-        $baselineEfficiency = $baselineData->efficiency > 0 ? $baselineData->efficiency :
-                             (BaselineData::$defaultEfficiencies[strtolower($baselineData->stove_type)] ?? 0.10);
+        $baselineEff = $baselineData->efficiency > 0 ? $baselineData->efficiency :
+                      (BaselineData::$defaultEfficiencies[strtolower($baselineData->stove_type)] ?? 0.10);
 
-        // Get project efficiency
-        $projectEfficiency = $this->new_efficiency > 0 ? $this->new_efficiency :
-                            (BaselineData::$defaultEfficiencies[strtolower($this->new_stove_type)] ?? 0.25);
+        $projectEff = $this->new_efficiency > 0 ? $this->new_efficiency :
+                     (self::$defaultEfficiencies[strtolower($this->new_stove_type)] ?? 0.25);
 
-        // Return true if project efficiency is higher than baseline
-        return $projectEfficiency > $baselineEfficiency;
+        return $projectEff > $baselineEff;
     }
 
     /**
-     * Boot method to automatically calculate emissions and credits when model is saved
-     * Laravel model event - fires before saving to database
-     *
-     * @return void
+     * Model event: Calculate values before saving
      */
     protected static function boot()
     {
-        parent::boot(); // Call parent boot method (Polymorphism)
+        parent::boot();
 
-        // Automatically calculate emissions and credits before saving
-        static::saving(function ($projectData) {
-            // Calculate and store project emissions
-            $projectData->emissions_after = $projectData->calculateMonthlyProjectEmissions();
+        static::saving(function ($project) {
+            $project->emissions_after = $project->calculateMonthlyProjectEmissions();
+            $project->credits_earned = $project->calculateCarbonCredits();
 
-            // Calculate and store carbon credits earned
-            $projectData->credits_earned = $projectData->calculateCarbonCredits();
+            // Calculate and store all metrics
+            $project->monthly_emissions = $project->calculateMonthlyProjectEmissions();
+            $project->annual_emissions = $project->monthly_emissions * 12;
+
+            if ($baseline = BaselineData::where('user_id', $project->user_id)->first()) {
+                $project->monthly_reduction = $baseline->monthly_emissions - $project->monthly_emissions;
+                $project->annual_reduction = $project->monthly_reduction * 12;
+                $project->percentage_reduction = $project->calculatePercentageReduction();
+                $project->total_credits = $project->getCumulativeCarbonCredits();
+                $project->emission_factor = self::$emissionFactors[strtolower($project->new_fuel_type)] ?? 0;
+            }
         });
     }
 }

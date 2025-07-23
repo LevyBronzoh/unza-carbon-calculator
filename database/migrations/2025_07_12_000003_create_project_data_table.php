@@ -6,7 +6,7 @@
  * cleaner cooking interventions and calculated carbon credits
  *
  * Developed by Levy Bronzoh, Climate Yanga
- * Version: 1.1
+ * Version: 1.2
  * Date: July 2025
  *
  * File: database/migrations/2025_07_12_000003_create_project_data_table.php
@@ -21,29 +21,45 @@ return new class extends Migration
     /**
      * Run the migrations.
      */
-    public function up()
+    public function up(): void
     {
         // Only create table if it doesn't exist
         if (!Schema::hasTable('project_data')) {
             Schema::create('project_data', function (Blueprint $table) {
                 $table->id();
 
-                // Foreign key with explicit constrained reference
+                // Foreign key reference with cascade delete
                 $table->foreignId('user_id')
                     ->constrained()
                     ->onDelete('cascade');
 
+                // Intervention details
                 $table->string('new_stove_type');
                 $table->string('new_fuel_type');
-                $table->decimal('fuel_use_project', 8, 3);
-                $table->decimal('new_efficiency', 5, 3);
+
+                // Usage metrics
+                $table->decimal('fuel_use_project', 8, 4);  // kg or liters per day
+                $table->decimal('new_efficiency', 5, 4);    // efficiency as decimal (0.25 for 25%)
                 $table->date('start_date');
-                $table->decimal('emissions_after', 10, 6);
-                $table->decimal('credits_earned', 10, 6);
+
+                // Emission calculations
+                $table->decimal('monthly_emissions', 10, 4);  // tCO₂e/month
+                $table->decimal('annual_emissions', 10, 4);   // tCO₂e/year
+                $table->decimal('emissions_after', 10, 6);    // Legacy field (tCO₂e)
+
+                // Carbon credit calculations
+                $table->decimal('monthly_reduction', 10, 4);  // tCO₂e/month
+                $table->decimal('annual_reduction', 10, 4);   // tCO₂e/year
+                $table->decimal('percentage_reduction', 5, 2); // %
+                $table->decimal('total_credits', 10, 4);      // Cumulative credits
+                $table->decimal('credits_earned', 10, 6);     // Legacy field (tCO₂e)
+                $table->decimal('emission_factor', 8, 6);     // tCO₂e per kg/liter
+
                 $table->timestamps();
 
-                // Optimized index strategy
-                $table->index(['user_id', 'start_date'], 'project_data_user_start_idx');
+                // Indexes and constraints
+                $table->unique('user_id');  // Ensure one project entry per user
+                $table->index(['user_id', 'start_date'], 'project_user_start_idx');
                 $table->index('new_stove_type');
                 $table->index('new_fuel_type');
             });
@@ -53,10 +69,10 @@ return new class extends Migration
     /**
      * Reverse the migrations.
      */
-    public function down()
+    public function down(): void
     {
-        // First drop foreign key constraints if they exist
         Schema::table('project_data', function (Blueprint $table) {
+            // First drop foreign key constraint
             $table->dropForeign(['user_id']);
         });
 

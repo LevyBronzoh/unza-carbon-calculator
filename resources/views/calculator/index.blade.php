@@ -2,80 +2,359 @@
 
 @section('content')
 <style>
+    :root {
+        --primary: #22c55e;
+        --primary-dark: #16a34a;
+        --secondary: #06b6d4;
+        --accent: #f59e0b;
+        --light: #f8fafc;
+        --light-gray: #f1f5f9;
+        --medium-gray: #64748b;
+        --dark: #0f172a;
+        --gradient-primary: linear-gradient(135deg, #22c55e 0%, #16a34a 100%);
+        --gradient-secondary: linear-gradient(135deg, #06b6d4 0%, #0284c7 100%);
+        --gradient-hero: linear-gradient(135deg, #f0f9ff 0%, #ecfdf5 100%);
+        --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+        --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+        --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+        --shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+    }
+
+    .calculator-container {
+        background: var(--gradient-hero);
+        border-radius: 16px;
+        padding: 2rem;
+        box-shadow: var(--shadow-md);
+        min-height: calc(100vh - 200px);
+    }
+
     .card {
-        border-radius: 10px;
-        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-        margin-bottom: 20px;
+        border-radius: 16px;
         border: none;
+        box-shadow: var(--shadow-sm);
+        transition: all 0.3s ease;
+        overflow: hidden;
+        margin-bottom: 1.5rem;
+        position: relative;
+        background: white;
     }
+
+    .card:hover {
+        transform: translateY(-2px);
+        box-shadow: var(--shadow-lg);
+    }
+
+    .card::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        height: 4px;
+        background: var(--gradient-primary);
+        z-index: 1;
+    }
+
     .card-header {
-        background-color: #2c7873;
+        background: var(--gradient-primary);
         color: white;
-        border-radius: 10px 10px 0 0 !important;
         font-weight: 600;
+        border-bottom: none;
+        padding: 1.25rem 1.5rem;
+        position: relative;
     }
+
     .btn-primary {
-        background-color: #2c7873;
-        border-color: #2c7873;
+        background: var(--gradient-primary);
+        border: none;
+        border-radius: 12px;
+        font-weight: 500;
+        transition: all 0.3s ease;
+        padding: 0.75rem 1.5rem;
     }
+
     .btn-primary:hover {
-        background-color: #235f5b;
-        border-color: #235f5b;
+        background: var(--gradient-primary);
+        transform: translateY(-2px);
+        box-shadow: var(--shadow-md);
+        filter: brightness(1.1);
     }
-    .emission-result {
-        background-color: #e8f4f3;
-        border-left: 4px solid #2c7873;
-        padding: 15px;
-        margin-top: 20px;
-        border-radius: 5px;
+
+    .btn-outline-primary {
+        border: 2px solid var(--primary);
+        color: var(--primary);
+        background: transparent;
+        border-radius: 12px;
+        font-weight: 500;
+        transition: all 0.3s ease;
     }
+
+    .btn-outline-primary:hover {
+        background: var(--primary);
+        color: white;
+        transform: translateY(-1px);
+    }
+
+    .btn-success {
+        background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+        border: none;
+        border-radius: 12px;
+        font-weight: 500;
+        transition: all 0.3s ease;
+    }
+
+    .btn-success:hover {
+        transform: translateY(-2px);
+        box-shadow: var(--shadow-md);
+        filter: brightness(1.1);
+    }
+
     .progress {
-        height: 25px;
-        border-radius: 5px;
+        height: 28px;
+        border-radius: 12px;
+        background-color: var(--light-gray);
+        overflow: hidden;
     }
+
     .progress-bar {
-        background-color: #2c7873;
+        background: var(--gradient-primary);
+        border-radius: 12px;
+        font-weight: 600;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 0.875rem;
     }
-    .tooltip-icon {
-        color: #6c757d;
-        cursor: pointer;
+
+    .alert {
+        border-radius: 12px;
+        border: none;
+        box-shadow: var(--shadow-sm);
+        padding: 1.25rem;
     }
+
+    .alert-success {
+        background: linear-gradient(135deg, #dcfce7 0%, #bbf7d0 100%);
+        color: #166534;
+        border-left: 4px solid var(--primary);
+    }
+
+    .alert-info {
+        background: linear-gradient(135deg, #e0f2fe 0%, #bae6fd 100%);
+        color: #075985;
+        border-left: 4px solid var(--secondary);
+    }
+
+    .alert-warning {
+        background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
+        color: #92400e;
+        border-left: 4px solid var(--accent);
+    }
+
     .toggle-container {
         display: flex;
         justify-content: center;
-        margin: 20px 0;
+        margin: 2rem 0;
     }
+
     .toggle-btn {
-        padding: 8px 20px;
-        border: 1px solid #2c7873;
+        padding: 0.875rem 2rem;
+        border: 2px solid var(--primary);
         background: white;
-        color: #2c7873;
+        color: var(--primary);
         cursor: pointer;
+        transition: all 0.3s ease;
+        font-weight: 600;
+        font-size: 0.95rem;
     }
+
     .toggle-btn.active {
-        background: #2c7873;
+        background: var(--primary);
         color: white;
+        box-shadow: var(--shadow-md);
     }
+
     .toggle-btn:first-child {
-        border-radius: 5px 0 0 5px;
+        border-radius: 12px 0 0 12px;
+        border-right: 1px solid var(--primary);
     }
+
     .toggle-btn:last-child {
-        border-radius: 0 5px 5px 0;
+        border-radius: 0 12px 12px 0;
+        border-left: 1px solid var(--primary);
     }
-    .tip-card {
-        border-left: 4px solid #ffc107;
+
+    .emission-badge {
+        font-size: 1.125rem;
+        font-weight: 700;
+        padding: 0.75rem 1.25rem;
+        border-radius: 12px;
+        display: inline-block;
+        margin: 0;
     }
-    .emission-comparison {
-        margin-top: 20px;
+
+    .badge-primary {
+        background: rgba(34, 197, 94, 0.15);
+        color: var(--primary-dark);
+        border: 2px solid rgba(34, 197, 94, 0.3);
+    }
+
+    .badge-success {
+        background: rgba(16, 185, 129, 0.15);
+        color: #065f46;
+        border: 2px solid rgba(16, 185, 129, 0.3);
+    }
+
+    .form-control, .form-select {
+        border-radius: 12px;
+        padding: 0.875rem 1rem;
+        border: 2px solid #e2e8f0;
+        transition: all 0.3s ease;
+        font-size: 0.95rem;
+    }
+
+    .form-control:focus, .form-select:focus {
+        border-color: var(--primary);
+        box-shadow: 0 0 0 0.25rem rgba(34, 197, 94, 0.15);
+        outline: none;
+    }
+
+    .form-control.is-invalid, .form-select.is-invalid {
+        border-color: #dc2626;
+        box-shadow: 0 0 0 0.25rem rgba(220, 38, 38, 0.15);
+    }
+
+    .form-label {
+        font-weight: 600;
+        color: var(--dark);
+        margin-bottom: 0.5rem;
+        font-size: 0.9rem;
+    }
+
+    .tooltip-icon {
+        color: var(--medium-gray);
+        cursor: help;
+        margin-left: 0.5rem;
+        transition: color 0.3s ease;
+    }
+
+    .tooltip-icon:hover {
+        color: var(--primary);
+    }
+
+    .credit-display {
+        font-size: 3rem;
+        font-weight: 800;
+        background: var(--gradient-primary);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+        margin-bottom: 0.5rem;
+        line-height: 1.1;
+    }
+
+    .stats-card {
+        background: var(--light);
+        border-radius: 12px;
+        padding: 1.5rem;
+        text-align: center;
+        border: 2px solid #e2e8f0;
+        transition: all 0.3s ease;
+    }
+
+    .stats-card:hover {
+        border-color: var(--primary);
+        transform: translateY(-2px);
+    }
+
+    .animate-fade-in {
+        animation: fadeInUp 0.8s ease-out;
+    }
+
+    @keyframes fadeInUp {
+        from {
+            opacity: 0;
+            transform: translateY(30px);
+        }
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    }
+
+    .ripple {
+        position: absolute;
+        border-radius: 50%;
+        background: rgba(255, 255, 255, 0.3);
+        transform: scale(0);
+        animation: ripple-animation 0.6s linear;
+        pointer-events: none;
+    }
+
+    @keyframes ripple-animation {
+        to {
+            transform: scale(4);
+            opacity: 0;
+        }
+    }
+
+    .list-group-item {
+        border: none;
+        border-bottom: 1px solid #e2e8f0;
+        padding: 1rem 0;
+    }
+
+    .list-group-item:last-child {
+        border-bottom: none;
+    }
+
+    .bg-gradient {
+        background: var(--gradient-hero);
+    }
+
+    .tip-item {
+        display: flex;
+        align-items: start;
+        margin-bottom: 1rem;
+        padding: 0.5rem 0;
+        border-bottom: 1px solid #e2e8f0;
+    }
+
+    .tip-item:last-child {
+        border-bottom: none;
+        margin-bottom: 0;
+    }
+
+    .tip-icon {
+        color: var(--accent);
+        margin-right: 0.75rem;
+        margin-top: 0.25rem;
+        font-size: 1.1rem;
+    }
+
+    /* Responsive improvements */
+    @media (max-width: 768px) {
+        .calculator-container {
+            padding: 1rem;
+        }
+
+        .credit-display {
+            font-size: 2.5rem;
+        }
+
+        .toggle-btn {
+            padding: 0.75rem 1.5rem;
+            font-size: 0.875rem;
+        }
     }
 </style>
 
-<div class="container py-4">
+<div class="container py-4 calculator-container animate-fade-in">
     <!-- Header Section -->
     <div class="row mb-4">
         <div class="col-12 text-center">
-            <h1 class="display-4">UNZA Carbon Calculator</h1>
-            <p class="lead">Track your cooking emissions and carbon credits</p>
+            <h1 class="display-5 fw-bold mb-3 text-dark">UNZA Carbon Calculator</h1>
+            <p class="lead text-muted">Track your cooking emissions and earn carbon credits</p>
         </div>
     </div>
 
@@ -88,55 +367,118 @@
     <div class="row">
         <div class="col-lg-8">
             <!-- Emissions Summary Card -->
-            <div class="card mb-4">
+            <div class="card">
                 <div class="card-header">
-                    <i class="fas fa-fire"></i> My Cooking Emissions Summary
+                    <i class="fas fa-fire me-2"></i> My Cooking Emissions Summary
                 </div>
                 <div class="card-body">
                     @if($baselineData && $projectData)
-                        <div class="row">
-                            <div class="col-md-6">
-                                <div class="alert alert-info">
-                                    <h5>Baseline Emissions</h5>
-                                    <p id="baseline-monthly">Monthly: {{ number_format($baselineData->monthly_emissions, 4) }} tCO₂e</p>
-                                    <p id="baseline-annual" style="display: none;">Annual: {{ number_format($baselineData->annual_emissions, 4) }} tCO₂e</p>
+                        <div class="row mb-4">
+                            <div class="col-md-6 mb-3 mb-md-0">
+                                <div class="alert alert-info h-100">
+                                    <h5 class="fw-bold mb-3">
+                                        <i class="fas fa-chart-line me-2"></i>
+                                        Baseline Emissions
+                                    </h5>
+                                    <p id="baseline-monthly" class="mb-1">
+                                        <i class="fas fa-calendar-day me-2"></i>
+                                        Monthly: <strong>{{ number_format($baselineData->monthly_emissions, 4) }} tCO₂e</strong>
+                                    </p>
+                                    <p id="baseline-annual" style="display: none;" class="mb-1">
+                                        <i class="fas fa-calendar-alt me-2"></i>
+                                        Annual: <strong>{{ number_format($baselineData->annual_emissions, 4) }} tCO₂e</strong>
+                                    </p>
                                 </div>
                             </div>
                             <div class="col-md-6">
-                                <div class="alert alert-success">
-                                    <h5>Current Emissions</h5>
-                                    <p id="current-monthly">Monthly: {{ number_format($projectData->monthly_emissions, 4) }} tCO₂e</p>
-                                    <p id="current-annual" style="display: none;">Annual: {{ number_format($projectData->annual_emissions, 4) }} tCO₂e</p>
+                                <div class="alert alert-success h-100">
+                                    <h5 class="fw-bold mb-3">
+                                        <i class="fas fa-leaf me-2"></i>
+                                        Current Emissions
+                                    </h5>
+                                    <p id="current-monthly" class="mb-1">
+                                        <i class="fas fa-calendar-day me-2"></i>
+                                        Monthly: <strong>{{ number_format($projectData->monthly_emissions, 4) }} tCO₂e</strong>
+                                    </p>
+                                    <p id="current-annual" style="display: none;" class="mb-1">
+                                        <i class="fas fa-calendar-alt me-2"></i>
+                                        Annual: <strong>{{ number_format($projectData->annual_emissions, 4) }} tCO₂e</strong>
+                                    </p>
                                 </div>
                             </div>
                         </div>
 
                         <div class="emission-comparison">
-                            <h5>Your Carbon Savings</h5>
-                            <div class="progress mb-3" style="height: 30px;">
-                                <div class="progress-bar bg-success" role="progressbar"
-                                     style="width: {{ $currentEmissions['percentage_reduction'] ?? 0 }}%"
+                            <h5 class="fw-bold mb-3">
+                                <i class="fas fa-seedling me-2"></i>
+                                Your Carbon Savings
+                            </h5>
+                            <div class="progress mb-4">
+                                <div class="progress-bar" role="progressbar"
+                                     style="width: {{ min($currentEmissions['percentage_reduction'] ?? 0, 100) }}%"
                                      aria-valuenow="{{ $currentEmissions['percentage_reduction'] ?? 0 }}"
                                      aria-valuemin="0" aria-valuemax="100">
                                     {{ number_format($currentEmissions['percentage_reduction'] ?? 0, 1) }}% Reduction
                                 </div>
                             </div>
-                            <p id="savings-monthly">Monthly Savings: {{ number_format($currentEmissions['monthly_reduction'] ?? 0, 4) }} tCO₂e</p>
-                            <p id="savings-annual" style="display: none;">Annual Savings: {{ number_format($currentEmissions['annual_reduction'] ?? 0, 4) }} tCO₂e</p>
-                            <p>Total Credits Earned: <strong>{{ number_format($projectData->total_credits ?? 0, 2) }} tCO₂e</strong></p>
+
+                            <div class="row">
+                                <div class="col-md-6 mb-3">
+                                    <div class="stats-card">
+                                        <p class="mb-2 text-muted fw-semibold">Monthly Savings</p>
+                                        <p id="savings-monthly" class="emission-badge badge-primary">
+                                            {{ number_format($currentEmissions['monthly_reduction'] ?? 0, 4) }} tCO₂e
+                                        </p>
+                                    </div>
+                                </div>
+                                <div class="col-md-6 mb-3">
+                                    <div class="stats-card">
+                                        <p class="mb-2 text-muted fw-semibold">Annual Savings</p>
+                                        <p id="savings-annual" style="display: none;" class="emission-badge badge-primary">
+                                            {{ number_format($currentEmissions['annual_reduction'] ?? 0, 4) }} tCO₂e
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="stats-card mb-3">
+                                <p class="mb-2 text-muted fw-semibold">
+                                    <i class="fas fa-award me-2"></i>
+                                    Total Credits Earned
+                                </p>
+                                <p class="emission-badge badge-success">
+                                    {{ number_format($projectData->total_credits ?? 0, 2) }} tCO₂e
+                                </p>
+                            </div>
                         </div>
                     @else
                         <div class="alert alert-warning">
                             @if(!$baselineData)
-                                <p><i class="bi bi-exclamation-triangle"></i> You haven't set up your baseline cooking data yet.</p>
-                                <a href="{{ route('calculator.create') }}?type=baseline" class="btn btn-primary">
-                                    <i class="bi bi-house-door"></i> Set Baseline Data
-                                </a>
+                                <div class="d-flex align-items-center">
+                                    <i class="fas fa-exclamation-triangle me-3 fs-4"></i>
+                                    <div>
+                                        <h5 class="mb-2 fw-bold">Setup Required</h5>
+                                        <p class="mb-0">You haven't set up your baseline cooking data yet.</p>
+                                    </div>
+                                </div>
+                                <div class="mt-3">
+                                    <a href="{{ route('calculator.create') }}?type=baseline" class="btn btn-primary">
+                                        <i class="fas fa-fire me-2"></i> Set Baseline Data
+                                    </a>
+                                </div>
                             @elseif(!$projectData)
-                                <p><i class="bi bi-exclamation-triangle"></i> You haven't entered your clean cooking project data.</p>
-                                <a href="{{ route('calculator.create') }}?type=project" class="btn btn-success">
-                                    <i class="bi bi-tree"></i> Add Project Data
-                                </a>
+                                <div class="d-flex align-items-center">
+                                    <i class="fas fa-exclamation-triangle me-3 fs-4"></i>
+                                    <div>
+                                        <h5 class="mb-2 fw-bold">Setup Required</h5>
+                                        <p class="mb-0">You haven't entered your clean cooking project data.</p>
+                                    </div>
+                                </div>
+                                <div class="mt-3">
+                                    <a href="{{ route('calculator.create') }}?type=project" class="btn btn-success">
+                                        <i class="fas fa-leaf me-2"></i> Add Project Data
+                                    </a>
+                                </div>
                             @endif
                         </div>
                     @endif
@@ -145,14 +487,14 @@
 
             @if(!$baselineData)
             <!-- Baseline Data Capture -->
-            <div class="card mb-4">
+            <div class="card">
                 <div class="card-header">
-                    <i class="bi bi-house-door"></i> Baseline Cooking Data
+                    <i class="fas fa-fire me-2"></i> Baseline Cooking Data
                 </div>
                 <div class="card-body">
                     <form method="POST" action="{{ route('calculator.store') }}" id="baselineForm">
                         @csrf
-                        <input type="hidden" name="type" value="baseline">
+                        <input type="hidden" name="calculation_type" value="baseline">
                         <div class="row g-3">
                             <div class="col-md-6">
                                 <label for="stove_type" class="form-label">Current Stove Type</label>
@@ -175,32 +517,35 @@
                                     <option value="LPG">LPG</option>
                                     <option value="Electricity">Electricity</option>
                                     <option value="Ethanol">Ethanol</option>
-                                    <option value="Other">Other</option>
                                 </select>
                             </div>
                             <div class="col-md-4">
-                                <label for="daily_hours" class="form-label">Daily Cooking Time (hours)</label>
-                                <input type="number" step="0.1" class="form-control" id="daily_hours" name="daily_hours" required>
+                                <label for="daily_cooking_hours" class="form-label">Daily Cooking Time (hours)</label>
+                                <input type="number" step="0.1" min="0" max="24" class="form-control"
+                                       id="daily_cooking_hours" name="daily_cooking_hours" required>
                             </div>
                             <div class="col-md-4">
                                 <label for="daily_fuel_use" class="form-label">Daily Fuel Use (kg or liters)</label>
-                                <input type="number" step="0.1" class="form-control" id="daily_fuel_use" name="daily_fuel_use" required>
+                                <input type="number" step="0.1" min="0" class="form-control"
+                                       id="daily_fuel_use" name="daily_fuel_use" required>
                             </div>
                             <div class="col-md-4">
                                 <label for="efficiency" class="form-label">
                                     Stove Efficiency (%)
-                                    <i class="bi bi-info-circle tooltip-icon" data-bs-toggle="tooltip"
+                                    <i class="fas fa-info-circle tooltip-icon" data-bs-toggle="tooltip"
                                        title="Leave blank to use default efficiency for your stove type"></i>
                                 </label>
-                                <input type="number" step="0.1" class="form-control" id="efficiency" name="efficiency">
+                                <input type="number" step="0.1" min="1" max="100" class="form-control"
+                                       id="efficiency" name="efficiency">
                             </div>
                             <div class="col-md-6">
                                 <label for="household_size" class="form-label">Household Size</label>
-                                <input type="number" class="form-control" id="household_size" name="household_size" required>
+                                <input type="number" min="1" max="20" class="form-control"
+                                       id="household_size" name="household_size" required>
                             </div>
-                            <div class="col-md-12 mt-3">
-                                <button type="submit" class="btn btn-primary">
-                                    <i class="bi bi-calculator"></i> Calculate Baseline Emissions
+                            <div class="col-12 mt-4">
+                                <button type="submit" class="btn btn-primary w-100 py-3">
+                                    <i class="fas fa-calculator me-2"></i> Calculate Baseline Emissions
                                 </button>
                             </div>
                         </div>
@@ -211,14 +556,14 @@
 
             @if($baselineData && !$projectData)
             <!-- Project Intervention Data -->
-            <div class="card mb-4">
-                <div class="card-header">
-                    <i class="bi bi-tree"></i> Cleaner Cooking Intervention
+            <div class="card">
+                <div class="card-header" style="background: var(--gradient-secondary);">
+                    <i class="fas fa-leaf me-2"></i> Cleaner Cooking Intervention
                 </div>
                 <div class="card-body">
                     <form method="POST" action="{{ route('calculator.store') }}" id="projectForm">
                         @csrf
-                        <input type="hidden" name="type" value="project">
+                        <input type="hidden" name="calculation_type" value="project">
                         <div class="row g-3">
                             <div class="col-md-6">
                                 <label for="new_stove_type" class="form-label">New Stove Type</label>
@@ -242,20 +587,22 @@
                                 </select>
                             </div>
                             <div class="col-md-4">
-                                <label for="fuel_use_project" class="form-label">Estimated Daily Fuel Use (kg or liters)</label>
-                                <input type="number" step="0.1" class="form-control" id="fuel_use_project" name="fuel_use_project" required>
+                                <label for="fuel_use_project" class="form-label">Daily Fuel Use (kg or liters)</label>
+                                <input type="number" step="0.1" min="0" class="form-control"
+                                       id="fuel_use_project" name="fuel_use_project" required>
                             </div>
                             <div class="col-md-4">
                                 <label for="new_efficiency" class="form-label">New Stove Efficiency (%)</label>
-                                <input type="number" step="0.1" class="form-control" id="new_efficiency" name="new_efficiency">
+                                <input type="number" step="0.1" min="1" max="100" class="form-control"
+                                       id="new_efficiency" name="new_efficiency">
                             </div>
                             <div class="col-md-4">
-                                <label for="start_date" class="form-label">Start Date of Cleaner Cooking</label>
+                                <label for="start_date" class="form-label">Start Date of Clean Cooking</label>
                                 <input type="date" class="form-control" id="start_date" name="start_date" required>
                             </div>
-                            <div class="col-md-12 mt-3">
-                                <button type="submit" class="btn btn-success">
-                                    <i class="bi bi-calculator"></i> Calculate Emissions Saved
+                            <div class="col-12 mt-4">
+                                <button type="submit" class="btn btn-success w-100 py-3">
+                                    <i class="fas fa-calculator me-2"></i> Calculate Emissions Saved
                                 </button>
                             </div>
                         </div>
@@ -266,13 +613,19 @@
 
             <!-- Weekly Update Card -->
             @if($projectData)
-            <div class="card mb-4">
-                <div class="card-header">
-                    <i class="bi bi-calendar-week"></i> Weekly Update
+            <div class="card">
+                <div class="card-header" style="background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);">
+                    <i class="fas fa-calendar-week me-2"></i> Weekly Update
                 </div>
                 <div class="card-body">
                     <div class="alert alert-info">
-                        <i class="bi bi-info-circle"></i> Remember to update your weekly cooking data for accurate credit tracking.
+                        <div class="d-flex align-items-center">
+                            <i class="fas fa-info-circle me-3 fs-4"></i>
+                            <div>
+                                <h5 class="mb-1 fw-bold">Tracking Reminder</h5>
+                                <p class="mb-0">Update your weekly cooking data for accurate credit tracking</p>
+                            </div>
+                        </div>
                     </div>
 
                     <form method="POST" action="{{ route('calculator.weekly.update') }}">
@@ -280,22 +633,22 @@
                         <div class="row g-3">
                             <div class="col-md-4">
                                 <label for="actual_fuel_use" class="form-label">This Week's Fuel Use (kg/liters)</label>
-                                <input type="number" step="0.01" class="form-control" id="actual_fuel_use"
-                                       name="actual_fuel_use" required>
+                                <input type="number" step="0.01" min="0" class="form-control"
+                                       id="actual_fuel_use" name="actual_fuel_use" required>
                             </div>
                             <div class="col-md-4">
                                 <label for="cooking_hours" class="form-label">Cooking Hours This Week</label>
-                                <input type="number" step="0.1" class="form-control" id="cooking_hours"
-                                       name="cooking_hours" required>
+                                <input type="number" step="0.1" min="0" class="form-control"
+                                       id="cooking_hours" name="cooking_hours" required>
                             </div>
                             <div class="col-md-4">
                                 <label for="week_start_date" class="form-label">Week Starting</label>
                                 <input type="date" class="form-control" id="week_start_date"
                                        name="week_start_date" required>
                             </div>
-                            <div class="col-md-12 mt-3">
-                                <button type="submit" class="btn btn-primary">
-                                    <i class="bi bi-upload"></i> Update My Data
+                            <div class="col-12 mt-4">
+                                <button type="submit" class="btn btn-primary w-100 py-3">
+                                    <i class="fas fa-upload me-2"></i> Update My Data
                                 </button>
                             </div>
                         </div>
@@ -307,29 +660,29 @@
 
         <div class="col-lg-4">
             <!-- Quick Actions Card -->
-            <div class="card mb-4">
+            <div class="card">
                 <div class="card-header">
-                    <i class="bi bi-lightning"></i> Quick Actions
+                    <i class="fas fa-bolt me-2"></i> Quick Actions
                 </div>
                 <div class="card-body">
-                    <div class="d-grid gap-2">
+                    <div class="d-grid gap-3">
                         @if(!$baselineData)
                             <a href="{{ route('calculator.create') }}?type=baseline"
-                               class="btn btn-outline-primary btn-sm mb-2">
-                                <i class="bi bi-house-door"></i> Add Baseline Data
+                               class="btn btn-outline-primary text-start py-3">
+                                <i class="fas fa-fire me-3"></i> Add Baseline Data
                             </a>
                         @endif
                         @if($baselineData && !$projectData)
                             <a href="{{ route('calculator.create') }}?type=project"
-                               class="btn btn-outline-success btn-sm mb-2">
-                                <i class="bi bi-tree"></i> Add Project Data
+                               class="btn btn-outline-success text-start py-3">
+                                <i class="fas fa-leaf me-3"></i> Add Project Data
                             </a>
                         @endif
-                        <a href="#" class="btn btn-outline-info btn-sm mb-2">
-                            <i class="bi bi-file-earmark-arrow-down"></i> Export My Data
+                        <a href="#" class="btn btn-outline-secondary text-start py-3">
+                            <i class="fas fa-file-export me-3"></i> Export My Data
                         </a>
-                        <a href="#" class="btn btn-outline-warning btn-sm mb-2">
-                            <i class="bi bi-graph-up"></i> View Progress Report
+                        <a href="#" class="btn btn-outline-info text-start py-3">
+                            <i class="fas fa-chart-line me-3"></i> View Progress Report
                         </a>
                     </div>
                 </div>
@@ -337,172 +690,170 @@
 
             <!-- Your Carbon Credits Card -->
             @if($projectData)
-            <div class="card mb-4">
+            <div class="card">
                 <div class="card-header">
-                    <i class="bi bi-award"></i> Your Carbon Credits
+                    <i class="fas fa-award me-2"></i> Your Carbon Credits
                 </div>
                 <div class="card-body text-center">
-                    <h2 class="display-4">{{ number_format($projectData->total_credits ?? 0, 2) }}</h2>
-                    <p class="mb-1">tonnes CO₂e saved</p>
-                    <p class="small text-muted">Since: {{ $projectData->start_date ?? 'N/A' }}</p>
-                    <div class="d-grid gap-2">
-                        <button class="btn btn-outline-primary">
-                            <i class="bi bi-file-text"></i> View Credit Report
+                    <div class="credit-display">
+                        {{ number_format($projectData->total_credits ?? 0, 2) }}
+                    </div>
+                    <p class="mb-1 fw-semibold">tonnes CO₂e saved</p>
+                    <p class="small text-muted">Since: {{ $projectData->start_date ? $projectData->start_date->format('M Y') : 'N/A' }}</p>
+                    <div class="d-grid gap-2 mt-3">
+                        <button class="btn btn-outline-primary py-2">
+                            <i class ="fas fa-certificate me-2"></i> Verify Credits
+                        </button>
+                        <button class="btn btn-outline-success py-2">
+                            <i class="fas fa-share-alt me-2"></i> Share Achievement
                         </button>
                     </div>
                 </div>
             </div>
             @endif
 
-            <!-- Clean Cooking Tips Card -->
-            <div class="card tip-card mb-4">
+            <!-- Tips & Insights Card -->
+            <div class="card">
                 <div class="card-header">
-                    <i class="bi bi-lightbulb"></i> Clean Cooking Tips
+                    <i class="fas fa-lightbulb me-2"></i> Tips & Insights
                 </div>
                 <div class="card-body">
-                    <div class="mb-3">
-                        <h6><i class="bi bi-gear"></i> Improve Your Stove Efficiency</h6>
-                        <p class="small">Using an improved biomass stove can reduce fuel use by 30-60% compared to traditional stoves.</p>
+                    <div class="tip-item">
+                        <i class="fas fa-leaf tip-icon"></i>
+                        <div>
+                            <p class="mb-1 fw-semibold">Maximize Your Impact</p>
+                            <p class="small text-muted mb-0">Using your clean cooking stove consistently can increase your carbon credits by up to 40%</p>
+                        </div>
                     </div>
-                    <div class="mb-3">
-                        <h6><i class="bi bi-lightning"></i> Consider LPG or Electric</h6>
-                        <p class="small">LPG and electric stoves produce significantly fewer emissions and are better for indoor air quality.</p>
+                    <div class="tip-item">
+                        <i class="fas fa-clock tip-icon"></i>
+                        <div>
+                            <p class="mb-1 fw-semibold">Track Regularly</p>
+                            <p class="small text-muted mb-0">Weekly updates help ensure accurate credit calculations and better monitoring</p>
+                        </div>
                     </div>
-                    <div class="mb-3">
-                        <h6><i class="bi bi-people"></i> Community Benefits</h6>
-                        <p class="small">Every tonne of CO₂e reduced helps UNZA contribute to Zambia's climate goals.</p>
+                    <div class="tip-item">
+                        <i class="fas fa-users tip-icon"></i>
+                        <div>
+                            <p class="mb-1 fw-semibold">Household Participation</p>
+                            <p class="small text-muted mb-0">Involving all household members in clean cooking practices maximizes emissions reduction</p>
+                        </div>
                     </div>
-                    <hr>
-                    <a href="#" class="btn btn-outline-secondary btn-sm">
-                        <i class="bi bi-book"></i> More Tips & Resources
-                    </a>
                 </div>
             </div>
 
-            <!-- Recent Calculations -->
+            <!-- Environmental Impact Card -->
+            @if($projectData)
             <div class="card">
                 <div class="card-header">
-                    <i class="bi bi-clock-history"></i> Recent Activity
+                    <i class="fas fa-globe-africa me-2"></i> Environmental Impact
                 </div>
                 <div class="card-body">
-                    <ul class="list-group list-group-flush">
-                        @forelse($calculations ?? [] as $calculation)
-                        <li class="list-group-item d-flex justify-content-between align-items-center">
-                            <div>
-                                <strong>{{ ucfirst($calculation->type ?? 'Unknown') }}</strong>
-                                <br>
-                                <small class="text-muted">{{ $calculation->created_at->format('M d, Y') ?? 'Unknown date' }}</small>
-                            </div>
-                            <span class="badge bg-{{ $calculation->type === 'baseline' ? 'primary' : 'success' }}">
-                                {{ ucfirst($calculation->type ?? 'Unknown') }}
-                            </span>
-                        </li>
-                        @empty
-                        <li class="list-group-item">
-                            <i class="bi bi-info-circle"></i> No calculations yet. Get started with your baseline data!
-                        </li>
-                        @endforelse
-                    </ul>
+                    <div class="stats-card mb-3">
+                        <p class="mb-2 text-muted fw-semibold">Trees Equivalent</p>
+                        <p class="emission-badge badge-success">
+                            {{ number_format(($projectData->total_credits ?? 0) * 40, 0) }} trees
+                        </p>
+                        <p class="small text-muted">Trees that would absorb the same CO₂</p>
+                    </div>
+                    <div class="stats-card">
+                        <p class="mb-2 text-muted fw-semibold">Car Miles Offset</p>
+                        <p class="emission-badge badge-primary">
+                            {{ number_format(($projectData->total_credits ?? 0) * 2204, 0) }} miles
+                        </p>
+                        <p class="small text-muted">Equivalent car emissions avoided</p>
+                    </div>
                 </div>
             </div>
+            @endif
         </div>
     </div>
 </div>
-@endsection
 
-@section('scripts')
 <script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Toggle between monthly and annual view
+    const monthlyBtn = document.getElementById('monthlyBtn');
+    const annualBtn = document.getElementById('annualBtn');
+
+    monthlyBtn.addEventListener('click', function() {
+        toggleView('monthly');
+    });
+
+    annualBtn.addEventListener('click', function() {
+        toggleView('annual');
+    });
+
+    function toggleView(view) {
+        // Update button states
+        if (view === 'monthly') {
+            monthlyBtn.classList.add('active');
+            annualBtn.classList.remove('active');
+
+            // Show monthly data, hide annual
+            document.querySelectorAll('[id*="-monthly"]').forEach(el => el.style.display = 'block');
+            document.querySelectorAll('[id*="-annual"]').forEach(el => el.style.display = 'none');
+        } else {
+            annualBtn.classList.add('active');
+            monthlyBtn.classList.remove('active');
+
+            // Show annual data, hide monthly
+            document.querySelectorAll('[id*="-annual"]').forEach(el => el.style.display = 'block');
+            document.querySelectorAll('[id*="-monthly"]').forEach(el => el.style.display = 'none');
+        }
+    }
+
     // Initialize tooltips
     var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
     var tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) {
         return new bootstrap.Tooltip(tooltipTriggerEl);
     });
 
-    // Initialize date picker for week starting date
-    const weekStartDate = document.getElementById('week_start_date');
-    if (weekStartDate) {
-        weekStartDate.valueAsDate = new Date();
-    }
+    // Ripple effect for buttons
+    document.querySelectorAll('.btn').forEach(button => {
+        button.addEventListener('click', function(e) {
+            const ripple = document.createElement('span');
+            const rect = this.getBoundingClientRect();
+            const size = Math.max(rect.width, rect.height);
+            const x = e.clientX - rect.left - size / 2;
+            const y = e.clientY - rect.top - size / 2;
 
-    // Toggle between monthly and annual view
-    document.getElementById('monthlyBtn').addEventListener('click', function() {
-        this.classList.add('active');
-        document.getElementById('annualBtn').classList.remove('active');
+            ripple.style.width = ripple.style.height = size + 'px';
+            ripple.style.left = x + 'px';
+            ripple.style.top = y + 'px';
+            ripple.classList.add('ripple');
 
-        // Show monthly data
-        const monthlyElements = document.querySelectorAll('[id*="-monthly"], [id*="savings-monthly"]');
-        const annualElements = document.querySelectorAll('[id*="-annual"], [id*="savings-annual"]');
+            this.appendChild(ripple);
 
-        monthlyElements.forEach(el => el.style.display = 'block');
-        annualElements.forEach(el => el.style.display = 'none');
-    });
-
-    document.getElementById('annualBtn').addEventListener('click', function() {
-        this.classList.add('active');
-        document.getElementById('monthlyBtn').classList.remove('active');
-
-        // Show annual data
-        const monthlyElements = document.querySelectorAll('[id*="-monthly"], [id*="savings-monthly"]');
-        const annualElements = document.querySelectorAll('[id*="-annual"], [id*="savings-annual"]');
-
-        monthlyElements.forEach(el => el.style.display = 'none');
-        annualElements.forEach(el => el.style.display = 'block');
-    });
-
-    // AJAX for quick calculations (optional)
-    const quickCalcForm = document.getElementById('quickCalcForm');
-    if (quickCalcForm) {
-        quickCalcForm.addEventListener('submit', function(e) {
-            e.preventDefault();
-            fetch("{{ route('calculator.quick.calculate') }}", {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content
-                },
-                body: JSON.stringify({
-                    fuel_type: document.getElementById('fuel_type').value,
-                    daily_fuel_use: document.getElementById('daily_fuel_use').value
-                })
-            })
-            .then(response => response.json())
-            .then(data => {
-                const quickResult = document.getElementById('quickResult');
-                if (quickResult) {
-                    quickResult.innerHTML = `
-                        <p>Estimated Monthly: ${data.monthly.toFixed(4)} tCO₂e</p>
-                        <p>Estimated Annual: ${data.annual.toFixed(4)} tCO₂e</p>
-                    `;
-                    quickResult.style.display = 'block';
-                }
-            })
-            .catch(error => {
-                console.error('Error:', error);
-            });
+            setTimeout(() => {
+                ripple.remove();
+            }, 600);
         });
-    }
+    });
 
-    // Form validation and user feedback
+    // Form validation enhancement
     const forms = document.querySelectorAll('form');
     forms.forEach(form => {
         form.addEventListener('submit', function(e) {
-            const requiredFields = form.querySelectorAll('[required]');
-            let isValid = true;
-
-            requiredFields.forEach(field => {
-                if (!field.value.trim()) {
-                    field.classList.add('is-invalid');
-                    isValid = false;
-                } else {
-                    field.classList.remove('is-invalid');
-                }
-            });
-
-            if (!isValid) {
-                e.preventDefault();
-                alert('Please fill in all required fields.');
+            // Add loading state to submit button
+            const submitBtn = form.querySelector('button[type="submit"]');
+            if (submitBtn) {
+                submitBtn.disabled = true;
+                submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i> Processing...';
             }
         });
     });
+
+    // Auto-set week start date to current week
+    const weekStartInput = document.getElementById('week_start_date');
+    if (weekStartInput) {
+        const today = new Date();
+        const dayOfWeek = today.getDay();
+        const startOfWeek = new Date(today);
+        startOfWeek.setDate(today.getDate() - dayOfWeek);
+        weekStartInput.value = startOfWeek.toISOString().split('T')[0];
+    }
+});
 </script>
+
 @endsection

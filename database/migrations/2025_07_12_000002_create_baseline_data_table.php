@@ -6,7 +6,7 @@
  * cooking methods and emission calculations before any intervention
  *
  * Developed by Levy Bronzoh, Climate Yanga
- * Version: 1.1
+ * Version: 1.2
  * Date: July 2025
  *
  * File: database/migrations/2025_07_12_000002_create_baseline_data_table.php
@@ -21,28 +21,40 @@ return new class extends Migration
     /**
      * Run the migrations.
      */
-    public function up()
+    public function up(): void
     {
         // Only create table if it doesn't exist
         if (!Schema::hasTable('baseline_data')) {
             Schema::create('baseline_data', function (Blueprint $table) {
                 $table->id();
 
-                // Foreign key reference
+                // Foreign key reference with cascade delete
                 $table->foreignId('user_id')
                     ->constrained()
                     ->onDelete('cascade');
 
+                // Cooking equipment details
                 $table->string('stove_type');
                 $table->string('fuel_type');
-                $table->decimal('daily_fuel_use', 8, 3);
-                $table->decimal('daily_hours', 5, 2);
-                $table->decimal('efficiency', 5, 3);
+
+                // Usage metrics
+                $table->decimal('daily_fuel_use', 8, 4);  // kg or liters per day
+                $table->decimal('daily_hours', 5, 2);     // hours per day
+                $table->decimal('efficiency', 5, 4);      // efficiency as decimal (0.10 for 10%)
+
+                // Household information
                 $table->unsignedInteger('household_size');
-                $table->decimal('emission_total', 10, 6);
+
+                // Emission calculations
+                $table->decimal('monthly_emissions', 10, 4);  // tCO₂e/month
+                $table->decimal('annual_emissions', 10, 4);   // tCO₂e/year
+                $table->decimal('emission_factor', 8, 6);     // tCO₂e per kg/liter
+                $table->decimal('emission_total', 10, 6);     // Legacy field (tCO₂e)
+
                 $table->timestamps();
 
-                // Optimized indexes
+                // Indexes for performance
+                $table->unique('user_id');  // Ensure one baseline per user
                 $table->index(['user_id', 'created_at'], 'baseline_user_created_idx');
                 $table->index('stove_type');
                 $table->index('fuel_type');
@@ -53,10 +65,10 @@ return new class extends Migration
     /**
      * Reverse the migrations.
      */
-    public function down()
+    public function down(): void
     {
-        // First drop foreign key constraints
         Schema::table('baseline_data', function (Blueprint $table) {
+            // First drop foreign key constraint
             $table->dropForeign(['user_id']);
         });
 

@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\BaselineData;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\Rule;
 
 class BaselineDataController extends Controller
@@ -66,6 +67,7 @@ class BaselineDataController extends Controller
         $validated = $this->validateRequest($request);
 
         try {
+            // Calculate emissions
             $emissions = $this->calculateEmissions(
                 $validated['fuel_type'],
                 $validated['daily_fuel_use'],
@@ -73,50 +75,57 @@ class BaselineDataController extends Controller
                 $validated['stove_type']
             );
 
-            $baselineData = BaselineData::create([
-                'user_id' => Auth::id(),
-                'stove_type' => $validated['stove_type'],
-                'fuel_type' => $validated['fuel_type'],
-                'daily_fuel_use' => $validated['daily_fuel_use'],
-                'daily_hours' => $validated['daily_hours'],
-                'stove_efficiency' => $validated['efficiency'] ?? $this->getDefaultEfficiency($validated['stove_type']),
-                'household_size' => $validated['household_size'],
-                'emission_total' => $emissions['monthly'],
-                'annual_emission' => $emissions['annual']
+            // Create baseline data record
+            $baselineData = BaselineData::updateOrCreate(
+                ['user_id' => Auth::id()], // Unique constraint
+                [
+                    'stove_type' => $validated['stove_type'],
+                    'fuel_type' => $validated['fuel_type'],
+                    'daily_fuel_use' => $validated['daily_fuel_use'],
+                    'daily_hours' => $validated['daily_hours'],
+                    'efficiency' => $validated['efficiency'] ?? $this->getDefaultEfficiency($validated['stove_type']),
+                    'household_size' => $validated['household_size'],
+                    'monthly_emissions' => $emissions['monthly'],
+                    'annual_emissions' => $emissions['annual'],
+                    'emission_factor' => self::EMISSION_FACTORS[$validated['fuel_type']]
+                ]
+            );
+
+            // Log successful creation
+            Log::info('Baseline data saved for user: '.Auth::id(), [
+                'data' => $baselineData->toArray()
             ]);
 
             return redirect()->route('dashboard')
-                ->with('success', 'Baseline cooking data saved successfully!');
+                ->with('success', 'Baseline data saved successfully!')
+                ->with('emissions', [
+                    'monthly' => $emissions['monthly'],
+                    'annual' => $emissions['annual']
+                ]);
 
         } catch (\Exception $e) {
-            return back()->withInput()
-                ->with('error', 'Error saving baseline data: ' . $e->getMessage());
+            Log::error('Error saving baseline data: '.$e->getMessage(), [
+                'user_id' => Auth::id(),
+                'request' => $request->all()
+            ]);
+
+            return back()
+                ->withInput()
+                ->with('error', 'Error saving data: '.$e->getMessage());
         }
     }
 
     /**
-     * Show the edit form for baseline data
+     * Calculate emissions (AJAX endpoint)
      */
-    public function edit($id)
+    public function calculate(Request $request)
     {
-        $baselineData = BaselineData::where('user_id', Auth::id())->findOrFail($id);
-
-        return view('baseline.edit', [
-            'baseline' => $baselineData,
-            'stoveTypes' => self::STOVE_TYPES,
-            'fuelTypes' => self::FUEL_TYPES,
-            'defaultEfficiencies' => self::DEFAULT_EFFICIENCIES
+        $validated = $request->validate([
+            'fuel_type' => ['required', Rule::in(self::FUEL_TYPES)],
+            'daily_fuel_use' => 'required|numeric|min:0',
+            'stove_type' => ['required', Rule::in(self::STOVE_TYPES)],
+            'efficiency' => 'nullable|numeric|min:0.01|max:1'
         ]);
-    }
-
-    /**
-     * Update the specified baseline data
-     */
-    public function update(Request $request, $id)
-    {
-        $baselineData = BaselineData::where('user_id', Auth::id())->findOrFail($id);
-
-        $validated = $this->validateRequest($request);
 
         try {
             $emissions = $this->calculateEmissions(
@@ -126,23 +135,19 @@ class BaselineDataController extends Controller
                 $validated['stove_type']
             );
 
-            $baselineData->update([
-                'stove_type' => $validated['stove_type'],
-                'fuel_type' => $validated['fuel_type'],
-                'daily_fuel_use' => $validated['daily_fuel_use'],
-                'daily_hours' => $validated['daily_hours'],
-                'stove_efficiency' => $validated['efficiency'] ?? $this->getDefaultEfficiency($validated['stove_type']),
-                'household_size' => $validated['household_size'],
-                'emission_total' => $emissions['monthly'],
-                'annual_emission' => $emissions['annual']
+            return response()->json([
+                'success' => true,
+                'monthly_emissions' => $emissions['monthly'],
+                'annual_emissions' => $emissions['annual'],
+                'efficiency_used' => $validated['efficiency'] ?? $this->getDefaultEfficiency($validated['stove_type']),
+                'emission_factor' => self::EMISSION_FACTORS[$validated['fuel_type']]
             ]);
 
-            return redirect()->route('dashboard')
-                ->with('success', 'Baseline cooking data updated successfully!');
-
         } catch (\Exception $e) {
-            return back()->withInput()
-                ->with('error', 'Error updating baseline data: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Calculation error: '.$e->getMessage()
+            ], 500);
         }
     }
 
@@ -152,24 +157,17 @@ class BaselineDataController extends Controller
     protected function validateRequest(Request $request)
     {
         return $request->validate([
-            'stove_type' => [
-                'required',
-                'string',
-                Rule::in(self::STOVE_TYPES)
-            ],
-            'fuel_type' => [
-                'required',
-                'string',
-                Rule::in(self::FUEL_TYPES)
-            ],
-            'daily_hours' => 'required|numeric|min:0|max:24',
-            'daily_fuel_use' => 'required|numeric|min:0',
+            'stove_type' => ['required', Rule::in(self::STOVE_TYPES)],
+            'fuel_type' => ['required', Rule::in(self::FUEL_TYPES)],
+            'daily_hours' => 'required|numeric|min:0.1|max:24',
+            'daily_fuel_use' => 'required|numeric|min:0.01',
             'efficiency' => 'nullable|numeric|min:0.01|max:1',
             'household_size' => 'required|integer|min:1|max:20',
         ], [
             'stove_type.in' => 'Please select a valid stove type',
             'fuel_type.in' => 'Please select a valid fuel type',
-            'daily_hours.max' => 'Daily cooking hours cannot exceed 24 hours'
+            'daily_hours.max' => 'Daily cooking hours cannot exceed 24 hours',
+            'daily_fuel_use.min' => 'Fuel use must be at least 0.01'
         ]);
     }
 
@@ -181,12 +179,16 @@ class BaselineDataController extends Controller
         $emissionFactor = self::EMISSION_FACTORS[$fuelType] ?? 0.0020;
         $efficiencyValue = $efficiency ?? $this->getDefaultEfficiency($stoveType);
 
-        $monthlyFuel = $dailyFuelUse * 30;
+        if ($efficiencyValue <= 0) {
+            throw new \Exception('Invalid efficiency value');
+        }
+
+        $monthlyFuel = $dailyFuelUse * 30; // 30 days
         $monthlyEmissions = ($monthlyFuel * $emissionFactor) / $efficiencyValue;
 
         return [
-            'monthly' => round($monthlyEmissions, 4),
-            'annual' => round($monthlyEmissions * 12, 4)
+            'monthly' => round($monthlyEmissions, 6),
+            'annual' => round($monthlyEmissions * 12, 6)
         ];
     }
 
@@ -196,13 +198,5 @@ class BaselineDataController extends Controller
     protected function getDefaultEfficiency($stoveType)
     {
         return self::DEFAULT_EFFICIENCIES[$stoveType] ?? 0.10;
-    }
-
-    /**
-     * Show success page after baseline submission
-     */
-    public function showSuccess()
-    {
-        return view('baseline.success');
     }
 }

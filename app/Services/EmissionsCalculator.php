@@ -11,7 +11,7 @@ use Illuminate\Support\Facades\Log;
  * carbon emissions from cooking activities and determining emission reductions
  *
  * Developed by Levy Bronzoh, Climate Yanga
- * Version: 1.0
+ * Version: 2.0
  * Date: July 2025
  */
 class EmissionsCalculator
@@ -21,13 +21,28 @@ class EmissionsCalculator
      * Emission factors for different fuel types (tCO₂e/kg or tCO₂e/l)
      * Based on Verra VM0042 methodology and Zambian context
      */
-    private $emissionFactors = [
+    private const EMISSION_FACTORS = [
         'Wood' => 0.001747,        // tCO₂e/kg - Wood biomass
         'Charcoal' => 0.00674,     // tCO₂e/kg - Charcoal
         'LPG' => 0.002983,         // tCO₂e/kg - Liquefied Petroleum Gas
         'Electricity' => 0.00085,  // tCO₂e/kWh - Zambia grid average
         'Kerosene' => 0.00264,     // tCO₂e/l - Kerosene
         'Ethanol' => 0.00189,      // tCO₂e/l - Ethanol fuel
+        'Other' => 0.002000        // default
+    ];
+
+    /**
+     * @var array
+     * Default stove efficiencies (as decimals)
+     */
+    private const DEFAULT_EFFICIENCIES = [
+        '3-Stone Fire' => 0.10,
+        'Charcoal Brazier' => 0.15,
+        'Kerosene Stove' => 0.45,
+        'LPG Stove' => 0.55,
+        'Electric Stove' => 0.75,
+        'Improved Biomass Stove' => 0.35,
+        'Ethanol Stove' => 0.50
     ];
 
     /**
@@ -44,52 +59,22 @@ class EmissionsCalculator
 
     /**
      * Calculate baseline emissions using Verra VM0042 methodology
-     *
      * Formula: E_baseline = (F_baseline × EF_fuel) / η_baseline
      *
      * @param float $dailyFuelUse - Daily fuel consumption (kg or liters)
      * @param string $fuelType - Type of fuel being used
-     * @param float $stoveEfficiency - Efficiency of the stove (decimal: 0.1 = 10%)
+     * @param string $stoveType - Type of stove being used
+     * @param float|null $efficiency - Custom efficiency (decimal or percentage)
      * @param string $period - Calculation period ('monthly' or 'annual')
-     * @return float - Baseline emissions in tCO₂e
-     *
-     * This method calculates the baseline emissions before any intervention
+     * @return array - Detailed emissions results
      */
-    public function calculateBaselineEmissions($dailyFuelUse, $fuelType, $stoveEfficiency, $period = 'monthly')
+    public function calculateBaselineEmissions($dailyFuelUse, $fuelType, $stoveType, $efficiency = null, $period = 'monthly')
     {
-        // Get emission factor for the specified fuel type
+        // Get emission factor for fuel type
         $emissionFactor = $this->getEmissionFactor($fuelType);
 
-        // Calculate period multiplier (30 days for monthly, 365 for annual)
-        $periodMultiplier = $this->getPeriodMultiplier($period);
-
-        // Calculate total fuel consumption for the period
-        $periodFuelConsumption = $dailyFuelUse * $periodMultiplier;
-
-        // Apply Verra VM0042 formula for baseline emissions
-        // E_baseline = (F_baseline × EF_fuel) / η_baseline
-        $baselineEmissions = ($periodFuelConsumption * $emissionFactor) / $stoveEfficiency;
-
-        return $baselineEmissions;
-    }
-
-    /**
-     * Calculate project emissions after intervention
-     *
-     * Formula: E_project = (F_project × EF_fuel) / η_project
-     *
-     * @param float $dailyFuelUse - Daily fuel consumption after intervention (kg or liters)
-     * @param string $fuelType - Type of fuel being used in project
-     * @param float $stoveEfficiency - Efficiency of the new stove (decimal)
-     * @param string $period - Calculation period ('monthly' or 'annual')
-     * @return float - Project emissions in tCO₂e
-     *
-     * This method calculates emissions after implementing cleaner cooking methods
-     */
-    public function calculateProjectEmissions($dailyFuelUse, $fuelType, $stoveEfficiency, $period = 'monthly')
-    {
-        // Get emission factor for the specified fuel type
-        $emissionFactor = $this->getEmissionFactor($fuelType);
+        // Get stove efficiency (use provided or default)
+        $stoveEfficiency = $this->getStoveEfficiency($stoveType, $efficiency);
 
         // Calculate period multiplier
         $periodMultiplier = $this->getPeriodMultiplier($period);
@@ -97,33 +82,65 @@ class EmissionsCalculator
         // Calculate total fuel consumption for the period
         $periodFuelConsumption = $dailyFuelUse * $periodMultiplier;
 
-        // Apply Verra VM0042 formula for project emissions
-        // E_project = (F_project × EF_fuel) / η_project
-        $projectEmissions = ($periodFuelConsumption * $emissionFactor) / $stoveEfficiency;
+        // Calculate emissions using Verra VM0042 formula
+        $emissions = ($periodFuelConsumption * $emissionFactor) / $stoveEfficiency;
 
-        return $projectEmissions;
+        // Calculate annual emissions if monthly was requested
+        $annualEmissions = $period === 'monthly'
+            ? $this->convertToAnnual($emissions)
+            : $this->convertToMonthly($emissions);
+
+        return [
+            'emissions' => round($emissions, 6),
+            'annual_emissions' => round($annualEmissions, 6),
+            'emission_factor_used' => $emissionFactor,
+            'efficiency_used' => $stoveEfficiency,
+            'fuel_consumption' => $periodFuelConsumption,
+            'period' => $period
+        ];
     }
 
     /**
-     * Calculate emission reduction (carbon credits earned)
+     * Calculate project emissions using Verra VM0042 methodology
+     * Formula: E_project = (F_project × EF_fuel) / η_project
      *
-     * Formula: ER = E_baseline - E_project
-     *
-     * @param float $baselineEmissions - Baseline emissions (tCO₂e)
-     * @param float $projectEmissions - Project emissions (tCO₂e)
-     * @return float - Emission reduction in tCO₂e
-     *
-     * This method calculates the carbon credits earned by switching to cleaner cooking
+     * @param float $dailyFuelUse - Daily fuel consumption (kg or liters)
+     * @param string $fuelType - Type of fuel being used
+     * @param string $stoveType - Type of stove being used
+     * @param float|null $efficiency - Custom efficiency (decimal or percentage)
+     * @param string $period - Calculation period ('monthly' or 'annual')
+     * @return array - Detailed emissions results
      */
-    public function calculateEmissionReduction($baselineEmissions, $projectEmissions)
+    public function calculateProjectEmissions($dailyFuelUse, $fuelType, $stoveType, $efficiency = null, $period = 'monthly')
     {
-        // Calculate emission reduction using Verra VM0042 methodology
-        // ER = E_baseline - E_project
-        $emissionReduction = $baselineEmissions - $projectEmissions;
+        // Get emission factor for fuel type
+        $emissionFactor = $this->getEmissionFactor($fuelType);
 
-        // Ensure emission reduction is not negative
-        // If project emissions are higher than baseline, return 0
-        return max(0, $emissionReduction);
+        // Get stove efficiency (use provided or default)
+        $stoveEfficiency = $this->getStoveEfficiency($stoveType, $efficiency);
+
+        // Calculate period multiplier
+        $periodMultiplier = $this->getPeriodMultiplier($period);
+
+        // Calculate total fuel consumption for the period
+        $periodFuelConsumption = $dailyFuelUse * $periodMultiplier;
+
+        // Calculate emissions using Verra VM0042 formula
+        $emissions = ($periodFuelConsumption * $emissionFactor) / $stoveEfficiency;
+
+        // Calculate annual emissions if monthly was requested
+        $annualEmissions = $period === 'monthly'
+            ? $this->convertToAnnual($emissions)
+            : $this->convertToMonthly($emissions);
+
+        return [
+            'emissions' => round($emissions, 6),
+            'annual_emissions' => round($annualEmissions, 6),
+            'emission_factor_used' => $emissionFactor,
+            'efficiency_used' => $stoveEfficiency,
+            'fuel_consumption' => $periodFuelConsumption,
+            'period' => $period
+        ];
     }
 
     /**
@@ -133,42 +150,88 @@ class EmissionsCalculator
      * @param array $projectData - Project intervention data
      * @param string $period - Calculation period
      * @return array - Comprehensive emissions calculation results
-     *
-     * This method provides a complete analysis of emissions before and after intervention
      */
     public function calculateComprehensiveEmissions($baselineData, $projectData, $period = 'monthly')
     {
         // Calculate baseline emissions
-        $baselineEmissions = $this->calculateBaselineEmissions(
+        $baselineResults = $this->calculateBaselineEmissions(
             $baselineData['daily_fuel_use'],
             $baselineData['fuel_type'],
-            $baselineData['efficiency'],
+            $baselineData['stove_type'],
+            $baselineData['efficiency'] ?? null,
             $period
         );
 
         // Calculate project emissions
-        $projectEmissions = $this->calculateProjectEmissions(
-            $projectData['fuel_use_project'],
-            $projectData['new_fuel_type'],
-            $projectData['new_efficiency'],
+        $projectResults = $this->calculateProjectEmissions(
+            $projectData['daily_fuel_use'],
+            $projectData['fuel_type'],
+            $projectData['stove_type'],
+            $projectData['efficiency'] ?? null,
             $period
         );
 
         // Calculate emission reduction
-        $emissionReduction = $this->calculateEmissionReduction($baselineEmissions, $projectEmissions);
+        $emissionReduction = $this->calculateEmissionReduction(
+            $baselineResults['emissions'],
+            $projectResults['emissions']
+        );
 
         // Calculate percentage reduction
-        $percentageReduction = $baselineEmissions > 0 ?
-            ($emissionReduction / $baselineEmissions) * 100 : 0;
+        // First calculate the raw emission reduction value (float)
+$rawReduction = max(0, $baselineResults['emissions'] - $projectResults['emissions']);
 
-        // Return comprehensive results array
+// Then get the full reduction data (array) if needed
+$reductionData = $this->calculateEmissionReduction(
+    $baselineResults['emissions'],
+    $projectResults['emissions'],
+    $startDate ?? null
+);
+
+// Calculate percentage
+$percentageReduction = $baselineResults['emissions'] > 0
+    ? ($rawReduction / $baselineResults['emissions']) * 100
+    : 0;
+
+return [
+    'baseline' => $baselineResults,
+    'project' => $projectResults,
+    'emission_reduction' => round($rawReduction, 6),
+    'percentage_reduction' => round($percentageReduction, 2),
+    'period' => $period,
+    'calculation_date' => now()->toDateString(),
+];
+    }
+
+    /**
+     * Calculate emission reductions (carbon credits)
+     * Formula: ER = E_baseline - E_project
+     *
+     * @param float $baselineEmissions - Baseline emissions (tCO₂e)
+     * @param float $projectEmissions - Project emissions (tCO₂e)
+     * @param string|null $startDate - Optional start date for cumulative credits
+     * @return array - Reduction details
+     */
+    public function calculateEmissionReduction($baselineEmissions, $projectEmissions, $startDate = null)
+    {
+        $reduction = max(0, $baselineEmissions - $projectEmissions);
+
+        // Calculate percentage reduction
+        $percentageReduction = $baselineEmissions > 0
+            ? ($reduction / $baselineEmissions) * 100
+            : 0;
+
+        // Calculate total credits earned since start date if provided
+        $totalCredits = $reduction;
+        if ($startDate) {
+            $monthsElapsed = now()->diffInMonths($startDate) + 1; // Include current month
+            $totalCredits = $reduction * $monthsElapsed;
+        }
+
         return [
-            'baseline_emissions' => round($baselineEmissions, 4),
-            'project_emissions' => round($projectEmissions, 4),
-            'emission_reduction' => round($emissionReduction, 4),
+            'reduction' => round($reduction, 6),
             'percentage_reduction' => round($percentageReduction, 2),
-            'period' => $period,
-            'calculation_date' => now()->toDateString(),
+            'total_credits' => round($totalCredits, 6)
         ];
     }
 
@@ -177,12 +240,9 @@ class EmissionsCalculator
      *
      * @param float $monthlyEmissions - Monthly emissions value
      * @return float - Annual emissions value
-     *
-     * This method converts monthly calculations to annual values
      */
     public function convertToAnnual($monthlyEmissions)
     {
-        // Multiply monthly emissions by 12 months
         return $monthlyEmissions * $this->monthsPerYear;
     }
 
@@ -191,13 +251,27 @@ class EmissionsCalculator
      *
      * @param float $annualEmissions - Annual emissions value
      * @return float - Monthly emissions value
-     *
-     * This method converts annual calculations to monthly values
      */
     public function convertToMonthly($annualEmissions)
     {
-        // Divide annual emissions by 12 months
         return $annualEmissions / $this->monthsPerYear;
+    }
+
+    /**
+     * Get stove efficiency
+     *
+     * @param string $stoveType - Type of stove
+     * @param float|null $efficiency - Custom efficiency value
+     * @return float - Efficiency value (decimal)
+     */
+    private function getStoveEfficiency($stoveType, $efficiency = null)
+    {
+        if ($efficiency !== null) {
+            // Convert percentage to decimal if necessary
+            return $efficiency > 1 ? $efficiency / 100 : $efficiency;
+        }
+
+        return self::DEFAULT_EFFICIENCIES[$stoveType] ?? 0.15; // Default to 15% if unknown
     }
 
     /**
@@ -205,22 +279,15 @@ class EmissionsCalculator
      *
      * @param string $fuelType - Type of fuel
      * @return float - Emission factor in tCO₂e/kg or tCO₂e/l
-     *
-     * This private method retrieves the emission factor for a given fuel type
      */
-    private function getEmissionFactor($fuelType)
+    public function getEmissionFactor($fuelType)
     {
-        // Check if fuel type exists in emission factors array
-        if (!isset($this->emissionFactors[$fuelType])) {
-            // Log warning for unknown fuel type
+        if (!isset(self::EMISSION_FACTORS[$fuelType])) {
             Log::warning("Unknown fuel type: {$fuelType}. Using default emission factor.");
-
-            // Return default emission factor for wood
-            return $this->emissionFactors['Wood'];
+            return self::EMISSION_FACTORS['Other'];
         }
 
-        // Return specific emission factor
-        return $this->emissionFactors[$fuelType];
+        return self::EMISSION_FACTORS[$fuelType];
     }
 
     /**
@@ -228,19 +295,15 @@ class EmissionsCalculator
      *
      * @param string $period - Period type ('monthly' or 'annual')
      * @return int - Number of days for the period
-     *
-     * This private method returns the appropriate multiplier for time period calculations
      */
     private function getPeriodMultiplier($period)
     {
-        // Switch statement to determine period multiplier
         switch (strtolower($period)) {
             case 'monthly':
-                return $this->daysPerMonth;    // 30 days
+                return $this->daysPerMonth;
             case 'annual':
-                return $this->daysPerMonth * $this->monthsPerYear; // 365 days
+                return $this->daysPerMonth * $this->monthsPerYear;
             default:
-                // Log warning for unknown period
                 Log::warning("Unknown period: {$period}. Using monthly as default.");
                 return $this->daysPerMonth;
         }
@@ -250,50 +313,65 @@ class EmissionsCalculator
      * Get all available emission factors
      *
      * @return array - Array of all emission factors
-     *
-     * This method returns all available emission factors for fuel types
      */
     public function getEmissionFactors()
     {
-        return $this->emissionFactors;
+        return self::EMISSION_FACTORS;
     }
 
     /**
-     * Add or update emission factor for a fuel type
+     * Get default efficiency for a stove type
      *
-     * @param string $fuelType - Type of fuel
-     * @param float $emissionFactor - Emission factor value
-     * @return void
-     *
-     * This method allows dynamic addition or updating of emission factors
+     * @param string $stoveType - Type of stove
+     * @return float - Default efficiency (decimal)
      */
-    public function setEmissionFactor($fuelType, $emissionFactor)
+    public function getDefaultEfficiency($stoveType)
     {
-        // Validate emission factor is positive
-        if ($emissionFactor <= 0) {
-            throw new \InvalidArgumentException("Emission factor must be positive");
+        return self::DEFAULT_EFFICIENCIES[$stoveType] ?? 0.15;
+    }
+
+    /**
+     * Validate calculation inputs
+     *
+     * @param float $dailyFuelUse - Daily fuel consumption
+     * @param string $fuelType - Type of fuel
+     * @param string $stoveType - Type of stove
+     * @param float|null $efficiency - Custom efficiency
+     * @return array - Array of error messages
+     */
+    public function validateInputs($dailyFuelUse, $fuelType, $stoveType, $efficiency = null)
+    {
+        $errors = [];
+
+        if ($dailyFuelUse <= 0) {
+            $errors[] = 'Daily fuel use must be greater than 0';
         }
 
-        // Add or update emission factor
-        $this->emissionFactors[$fuelType] = $emissionFactor;
+        if (!isset(self::EMISSION_FACTORS[$fuelType])) {
+            $errors[] = 'Invalid fuel type provided';
+        }
 
-        // Log the update
-        Log::info("Emission factor updated for {$fuelType}: {$emissionFactor}");
+        if (!isset(self::DEFAULT_EFFICIENCIES[$stoveType])) {
+            $errors[] = 'Invalid stove type provided';
+        }
+
+        if ($efficiency !== null && ($efficiency <= 0 || $efficiency > 100)) {
+            $errors[] = 'Efficiency must be between 1 and 100 percent';
+        }
+
+        return $errors;
     }
 
     /**
-     * Validate input data for emissions calculations
+     * Validate comprehensive calculation data
      *
      * @param array $data - Input data to validate
-     * @return bool - True if data is valid
-     * @throws \InvalidArgumentException - If data is invalid
-     *
-     * This method validates input data before performing calculations
+     * @return bool - True if valid
+     * @throws \InvalidArgumentException - If invalid
      */
     public function validateCalculationData($data)
     {
-        // Check required fields
-        $requiredFields = ['daily_fuel_use', 'fuel_type', 'efficiency'];
+        $requiredFields = ['daily_fuel_use', 'fuel_type', 'stove_type'];
 
         foreach ($requiredFields as $field) {
             if (!isset($data[$field]) || empty($data[$field])) {
@@ -301,18 +379,21 @@ class EmissionsCalculator
             }
         }
 
-        // Validate numeric fields
         if (!is_numeric($data['daily_fuel_use']) || $data['daily_fuel_use'] <= 0) {
             throw new \InvalidArgumentException("Daily fuel use must be a positive number");
         }
 
-        if (!is_numeric($data['efficiency']) || $data['efficiency'] <= 0 || $data['efficiency'] > 1) {
-            throw new \InvalidArgumentException("Efficiency must be between 0 and 1");
+        if (isset($data['efficiency']) &&
+            (!is_numeric($data['efficiency']) || $data['efficiency'] <= 0 || $data['efficiency'] > 100)) {
+            throw new \InvalidArgumentException("Efficiency must be between 1 and 100");
         }
 
-        // Validate fuel type exists
-        if (!isset($this->emissionFactors[$data['fuel_type']])) {
+        if (!isset(self::EMISSION_FACTORS[$data['fuel_type']])) {
             throw new \InvalidArgumentException("Unknown fuel type: {$data['fuel_type']}");
+        }
+
+        if (!isset(self::DEFAULT_EFFICIENCIES[$data['stove_type']])) {
+            throw new \InvalidArgumentException("Unknown stove type: {$data['stove_type']}");
         }
 
         return true;
